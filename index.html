@@ -125,6 +125,15 @@ nav button.active{color:var(--accent)}
 #offline-bar{background:var(--warn);color:#000;text-align:center;padding:4px;font-size:.75rem;display:none}
 #offline-bar.visible{display:block}
 
+/* Pull button loading */
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+#pull-btn.loading svg{animation:spin 1s linear infinite}
+
+/* Sync log panel */
+#sync-log{display:none;background:#2a0a0a;border-bottom:2px solid #e74c3c;padding:8px 12px;font-size:.78rem;font-family:monospace;color:#f5b7b1;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+#sync-log.visible{display:block}
+#sync-log-close{float:right;background:none;border:none;color:#e74c3c;cursor:pointer;font-size:1rem;padding:0 4px;line-height:1}
+
 /* Scrollbar */
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -134,6 +143,8 @@ nav button.active{color:var(--accent)}
 <body>
 
 <div id="offline-bar">Hors ligne — les données sont sauvegardées localement</div>
+
+<div id="sync-log"><button id="sync-log-close" onclick="document.getElementById('sync-log').classList.remove('visible')" title="Fermer">✕</button><span id="sync-log-content"></span></div>
 
 <header>
   <h1>🚗 Logbook</h1>
@@ -146,6 +157,9 @@ nav button.active{color:var(--accent)}
     </button>
     <button id="export-btn" onclick="exportData()" title="Exporter toutes les données">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+    <button id="pull-btn" onclick="pullFromAirtable(false)" title="Rafraîchir depuis Airtable (source de vérité)">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="21" x2="12" y2="3"/><path d="M20.88 18.09A5 5 0 0018 9h-1.26A8 8 0 103 16.29"/></svg>
     </button>
     <button id="sync-btn" onclick="doSync()">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
@@ -929,6 +943,139 @@ function toAirtableFields(table, payload) {
   return fields;
 }
 
+const AT_FIELD_MAP_REVERSE = {
+  courses:   { Date:'date', KmDebut:'kmDebut', KmFin:'kmFin', KmAffaires:'kmAffaires', Revenu:'revenu', Pourboire:'pourboire', Prime:'prime', DureeMin:'dureeMin' },
+  recharges: { Date:'date', Lieu:'lieu', Kwh:'kwh', Cout:'cout', PctAffaires:'pctAffaires' },
+  depenses:  { Date:'date', Categorie:'categorie', Montant:'montant', PctAffaires:'pctAffaires' },
+};
+
+function fromAirtableFields(table, atFields) {
+  const map = AT_FIELD_MAP_REVERSE[table] || {};
+  const local = {};
+  for (const [atKey, localKey] of Object.entries(map)) {
+    if (atFields[atKey] !== undefined) local[localKey] = atFields[atKey];
+  }
+  return local;
+}
+
+// Fetch all records from all 3 tables directly (mode local — token en localStorage)
+async function fetchAllDirect(token, baseId) {
+  const result = {};
+  for (const [tableKey, tableName] of Object.entries(AT_TABLE_MAP)) {
+    const records = [];
+    let offset;
+    do {
+      const url = `https://api.airtable.com/v0/${baseId}/${tableName}${offset ? `?offset=${encodeURIComponent(offset)}` : ''}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error?.message || `Airtable ${tableName} ${res.status}`);
+      }
+      const data = await res.json();
+      for (const rec of data.records) {
+        records.push({ airtableId: rec.id, ...fromAirtableFields(tableKey, rec.fields) });
+      }
+      offset = data.offset;
+    } while (offset);
+    result[tableKey] = records;
+  }
+  return result;
+}
+
+// Merge one table's Airtable records into local IndexedDB (Airtable = source of truth)
+async function mergeWithLocal(table, atRecords) {
+  const localAll = await dbGetAll(table);
+  const atIdSet  = new Set(atRecords.map(r => r.airtableId));
+  let added = 0, updated = 0, conflicts = 0, removed = 0;
+
+  for (const atRec of atRecords) {
+    const { airtableId, ...fields } = atRec;
+    const existing = localAll.find(r => r.airtableId === airtableId);
+    if (existing) {
+      if (existing._status === 'pending-update') conflicts++;
+      await dbPut(table, { ...existing, ...fields, airtableId, _status: 'synced' });
+      updated++;
+    } else {
+      await dbPut(table, { ...fields, airtableId, _status: 'synced' });
+      added++;
+    }
+  }
+
+  // Records with airtableId that no longer exist in Airtable → supprimés depuis un autre appareil
+  for (const local of localAll) {
+    if (local.airtableId && !atIdSet.has(local.airtableId) && local._status !== 'pending-delete') {
+      await dbDelete(table, local.id);
+      removed++;
+    }
+  }
+
+  return { added, updated, conflicts, removed };
+}
+
+// Pull from Airtable and merge into local IndexedDB
+// silent=true : appelé au démarrage, ne montre rien si aucun changement ni erreur réseau
+async function pullFromAirtable(silent = false) {
+  if (!navigator.onLine) {
+    if (!silent) showToastError('Hors ligne — impossible de rafraîchir depuis Airtable');
+    return;
+  }
+
+  const pullBtn = document.getElementById('pull-btn');
+  if (pullBtn) { pullBtn.disabled = true; pullBtn.classList.add('loading'); }
+
+  try {
+    const { token, baseId } = getLocalCreds();
+    const mode = (token && baseId) ? 'direct' : 'server';
+    let allData;
+
+    if (mode === 'direct') {
+      allData = await fetchAllDirect(token, baseId);
+    } else {
+      const res = await fetch('/api/pull');
+      const bodyText = await res.text();
+      console.log('[pull] /api/pull HTTP ' + res.status, bodyText);
+      if (!res.ok) {
+        if (res.status === 404 && silent) return;
+        let detail = bodyText;
+        try { const j = JSON.parse(bodyText); detail = j.error || bodyText; } catch {}
+        throw new Error(res.status === 404
+          ? 'Endpoint /api/pull introuvable (404) — configure le token dans ⚙ Paramètres'
+          : `Serveur ${res.status} : ${detail.slice(0, 200)}`
+        );
+      }
+      allData = JSON.parse(bodyText);
+    }
+
+    let tAdded = 0, tUpdated = 0, tConflicts = 0, tRemoved = 0;
+    for (const table of ['courses', 'recharges', 'depenses']) {
+      const r = await mergeWithLocal(table, allData[table] || []);
+      tAdded    += r.added;
+      tUpdated  += r.updated;
+      tConflicts += r.conflicts;
+      tRemoved  += r.removed;
+    }
+
+    console.log('[pull] done', { tAdded, tUpdated, tConflicts, tRemoved });
+    renderDashboard();
+    if (currentTab !== 'dashboard' && currentTab !== 'rapport') renderList(currentTab);
+    updateSyncBadge();
+
+    if (!silent || tAdded || tUpdated || tConflicts || tRemoved) {
+      const parts = [];
+      if (tAdded)     parts.push(`+${tAdded}`);
+      if (tUpdated)   parts.push(`↺${tUpdated}`);
+      if (tRemoved)   parts.push(`−${tRemoved}`);
+      if (tConflicts) parts.push(`⚠ ${tConflicts} conflit${tConflicts > 1 ? 's' : ''} (Airtable prioritaire)`);
+      showToast('↓ ' + (parts.length ? parts.join(' · ') : 'Déjà à jour'));
+    }
+  } catch (err) {
+    console.error('[pull] erreur :', err);
+    if (!silent) showToastError('Erreur : ' + err.message.slice(0, 120));
+  } finally {
+    if (pullBtn) { pullBtn.disabled = false; pullBtn.classList.remove('loading'); }
+  }
+}
+
 async function atDirect(method, path, body, token, baseId) {
   const res = await fetch(`https://api.airtable.com/v0/${baseId}${path}`, {
     method,
@@ -977,6 +1124,13 @@ async function updateSyncBadge(n) {
   badge.classList.toggle('visible', n > 0);
 }
 
+function showSyncLog(lines) {
+  const panel = document.getElementById('sync-log');
+  document.getElementById('sync-log-content').textContent = lines.join('\n');
+  panel.classList.add('visible');
+  panel.scrollTop = 0;
+}
+
 async function doSync() {
   const btn = document.getElementById('sync-btn');
   btn.disabled = true;
@@ -989,12 +1143,16 @@ async function doSync() {
       const all = await dbGetAll(tab);
       for (const r of all) {
         const { id, airtableId, _status, ...p } = r;
-        if (_status === 'pending-delete') {
-          payload.push({ table: tab, action: 'delete', localId: id, airtableId });
-        } else if (airtableId) {
-          payload.push({ table: tab, action: 'update', localId: id, airtableId, payload: p });
-        } else {
+        if (_status === 'local' || _status === undefined) {
           payload.push({ table: tab, action: 'create', localId: id, payload: p });
+        } else if (_status === 'pending-update') {
+          if (airtableId) {
+            payload.push({ table: tab, action: 'update', localId: id, airtableId, payload: p });
+          } else {
+            payload.push({ table: tab, action: 'create', localId: id, payload: p });
+          }
+        } else if (_status === 'pending-delete') {
+          payload.push({ table: tab, action: 'delete', localId: id, airtableId });
         }
       }
     }
@@ -1003,34 +1161,48 @@ async function doSync() {
 
     // Choix du mode : local (token en localStorage) ou serveur (Cloudflare Pages)
     const { token, baseId } = getLocalCreds();
+    const mode = (token && baseId) ? 'direct' : 'server';
+    console.log('[sync] mode=' + mode + ' items=' + payload.length, payload);
+
     let results;
 
-    if (token && baseId) {
-      // Mode local — appel Airtable direct depuis le navigateur
+    if (mode === 'direct') {
       results = await processDirect(payload, token, baseId);
     } else {
-      // Mode déployé — via Cloudflare Pages Function /api/sync
       const res = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      const bodyText = await res.text();
+      console.log('[sync] /api/sync HTTP ' + res.status, bodyText);
       if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        const is404 = res.status === 404;
-        throw new Error(is404
-          ? 'Endpoint /api/sync introuvable — configure le token dans ⚙ Paramètres pour le mode local'
-          : (e.error || `Serveur ${res.status}`)
+        let detail = bodyText;
+        try { const j = JSON.parse(bodyText); detail = j.error || bodyText; } catch {}
+        throw new Error(res.status === 404
+          ? 'Endpoint /api/sync introuvable (404) — configure le token dans ⚙ Paramètres'
+          : `Serveur ${res.status} : ${detail}`
         );
       }
-      results = await res.json();
+      try {
+        results = JSON.parse(bodyText);
+      } catch {
+        throw new Error('Réponse non-JSON du serveur : ' + bodyText.slice(0, 200));
+      }
     }
 
+    console.log('[sync] results', results);
+
     // Appliquer les résultats dans IndexedDB
-    let ok = 0, fail = 0;
+    let ok = 0;
+    const failDetails = [];
     for (const r of results) {
       const item = payload.find(p => p.localId === r.localId);
-      if (!item) continue;
+      if (!item) {
+        console.warn('[sync] localId introuvable dans payload :', r.localId, r);
+        failDetails.push(`localId=${r.localId} — introuvable dans payload (bug interne)`);
+        continue;
+      }
       if (r.success) {
         if (item.action === 'delete') {
           await dbDelete(item.table, r.localId);
@@ -1040,18 +1212,40 @@ async function doSync() {
         }
         ok++;
       } else {
-        fail++;
+        const detail = `[${item.table}] action=${item.action} localId=${item.localId} airtableId=${item.airtableId || '—'} → ${r.error || 'erreur inconnue'}`;
+        console.error('[sync] échec enregistrement :', detail, r);
+        failDetails.push(detail);
       }
     }
 
-    showToast(fail === 0
-      ? `${ok} synchronisé${ok > 1 ? 's' : ''} ✓`
-      : `${ok} ✓  ·  ${fail} erreur${fail > 1 ? 's' : ''}`
-    );
+    if (failDetails.length) {
+      const logLines = [
+        `Mode : ${mode}  |  Envoyés : ${payload.length}  |  OK : ${ok}  |  Échecs : ${failDetails.length}`,
+        '─────────────────────────────────',
+        ...failDetails,
+        '─────────────────────────────────',
+        'Ouvre DevTools (F12 > Console) pour les détails complets.',
+      ];
+      showSyncLog(logLines);
+      showToastError(`${ok} ✓  ·  ${failDetails.length} erreur${failDetails.length > 1 ? 's' : ''} — voir panneau rouge`);
+    } else {
+      document.getElementById('sync-log').classList.remove('visible');
+      showToast(`${ok} synchronisé${ok > 1 ? 's' : ''} ✓`);
+    }
+
     renderDashboard();
     if (currentTab !== 'dashboard' && currentTab !== 'rapport') renderList(currentTab);
   } catch (err) {
-    showToast('Erreur : ' + err.message);
+    console.error('[sync] erreur globale :', err);
+    const logLines = [
+      'ERREUR GLOBALE',
+      '─────────────────────────────────',
+      err.message,
+      '─────────────────────────────────',
+      'Ouvre DevTools (F12 > Console) pour la stack trace complète.',
+    ];
+    showSyncLog(logLines);
+    showToastError('Erreur : ' + err.message.slice(0, 80));
   } finally {
     btn.disabled = false;
     btn.style.opacity = '1';
@@ -1061,12 +1255,21 @@ async function doSync() {
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 let toastTimer;
-function showToast(msg) {
+function showToast(msg, durationMs = 2800) {
   const t = document.getElementById('toast');
   t.textContent = msg;
+  t.style.background = '';
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+  toastTimer = setTimeout(() => t.classList.remove('show'), durationMs);
+}
+function showToastError(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = '#7b1c1c';
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove('show'); t.style.background = ''; }, 6000);
 }
 
 // ─── Online/offline ───────────────────────────────────────────────────────────
@@ -1126,16 +1329,17 @@ async function handleImport(e) {
   }
 
   // Insérer les enregistrements du backup
-  // - On conserve l'airtableId si présent (sync fera un PATCH plutôt qu'un POST)
   // - On strip l'id local (auto-incrément recalculé par IndexedDB)
+  // - On strip aussi l'airtableId : après import on recrée tout dans Airtable (create)
+  //   pour éviter des PATCH sur des records qui n'existent plus dans la base cible
   for (const tab of ['courses', 'recharges', 'depenses']) {
     for (const r of data[tab]) {
-      const { id, _status, ...rest } = r;
-      await dbPut(tab, { ...rest, _status: rest.airtableId ? 'pending-update' : 'local' });
+      const { id, _status, airtableId, ...rest } = r;
+      await dbPut(tab, { ...rest, _status: 'local' });
     }
   }
 
-  showToast(`${total} enregistrement${total > 1 ? 's' : ''} importé${total > 1 ? 's' : ''} ✓ — clique Synchroniser`);
+  showToast(`${total} enregistrement${total > 1 ? 's' : ''} importé${total > 1 ? 's' : ''} ✓ — clique Synchroniser pour créer dans Airtable`, 4000);
   renderDashboard();
   if (currentTab !== 'dashboard' && currentTab !== 'rapport') renderList(currentTab);
   updateSyncBadge();
@@ -1153,6 +1357,9 @@ async function init() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+
+  // Auto-pull silencieux au démarrage si en ligne
+  if (navigator.onLine) pullFromAirtable(true);
 }
 
 init();
