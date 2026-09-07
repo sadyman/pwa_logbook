@@ -26,8 +26,8 @@ header{position:sticky;top:0;z-index:100;background:var(--bg2);display:flex;alig
 header h1{font-size:1.1rem;font-weight:700;color:var(--accent)}
 #sync-btn{position:relative;background:var(--bg3);color:var(--text);padding:8px 12px;border-radius:8px;font-size:0.85rem;display:flex;align-items:center;gap:6px}
 #sync-btn:active{opacity:.7}
-#export-btn,#settings-btn{background:var(--bg3);color:var(--text2);padding:8px 10px;border-radius:8px;display:flex;align-items:center}
-#export-btn:active,#settings-btn:active{opacity:.7}
+#export-btn,#import-btn,#settings-btn{background:var(--bg3);color:var(--text2);padding:8px 10px;border-radius:8px;display:flex;align-items:center}
+#export-btn:active,#import-btn:active,#settings-btn:active{opacity:.7}
 #settings-btn.configured{color:var(--accent)}
 #sync-badge{background:var(--warn);color:#000;border-radius:50%;width:18px;height:18px;font-size:.65rem;font-weight:700;display:none;align-items:center;justify-content:center;position:absolute;top:-6px;right:-6px}
 #sync-badge.visible{display:flex}
@@ -140,6 +140,9 @@ nav button.active{color:var(--accent)}
   <div style="display:flex;gap:8px">
     <button id="settings-btn" onclick="openSettings()" title="Paramètres Airtable">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+    <button id="import-btn" onclick="document.getElementById('import-file').click()" title="Importer un backup JSON">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 14 12 9 17 14"/><line x1="12" y1="9" x2="12" y2="21"/></svg>
     </button>
     <button id="export-btn" onclick="exportData()" title="Exporter toutes les données">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
