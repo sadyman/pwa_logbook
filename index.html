@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr"> 
+<html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -190,6 +190,10 @@ nav button.active{color:var(--accent)}
       <button class="btn btn-secondary" onclick="copyRapport()">📋 Copier TP-80/T2125</button>
       <button class="btn btn-secondary" onclick="exportData()">⬇ Export JSON</button>
     </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()">⬆ Importer backup JSON</button>
+    </div>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="handleImport(event)">
   </section>
 </main>
 
@@ -936,6 +940,48 @@ async function exportData() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showToast('Export téléchargé ✓');
+}
+
+// ─── Import backup ────────────────────────────────────────────────────────────
+async function handleImport(e) {
+  const file = e.target.files[0];
+  e.target.value = ''; // reset pour pouvoir réimporter le même fichier
+  if (!file) return;
+
+  let data;
+  try {
+    const text = await file.text();
+    data = JSON.parse(text);
+    if (!Array.isArray(data.courses) || !Array.isArray(data.recharges) || !Array.isArray(data.depenses))
+      throw new Error();
+  } catch {
+    showToast('Fichier invalide — export logbook JSON attendu');
+    return;
+  }
+
+  const total = data.courses.length + data.recharges.length + data.depenses.length;
+  if (!confirm(`Importer ${total} enregistrement${total > 1 ? 's' : ''} ?\nLes données locales existantes seront remplacées.\nClique Synchroniser ensuite pour pousser vers Airtable.`)) return;
+
+  // Effacer les données locales
+  for (const tab of ['courses', 'recharges', 'depenses']) {
+    const all = await dbGetAll(tab);
+    for (const r of all) await dbDelete(tab, r.id);
+  }
+
+  // Insérer les enregistrements du backup
+  // - On conserve l'airtableId si présent (sync fera un PATCH plutôt qu'un POST)
+  // - On strip l'id local (auto-incrément recalculé par IndexedDB)
+  for (const tab of ['courses', 'recharges', 'depenses']) {
+    for (const r of data[tab]) {
+      const { id, _status, ...rest } = r;
+      await dbPut(tab, { ...rest, _status: rest.airtableId ? 'pending-update' : 'local' });
+    }
+  }
+
+  showToast(`${total} enregistrement${total > 1 ? 's' : ''} importé${total > 1 ? 's' : ''} ✓ — clique Synchroniser`);
+  renderDashboard();
+  if (currentTab !== 'dashboard' && currentTab !== 'rapport') renderList(currentTab);
+  updateSyncBadge();
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
