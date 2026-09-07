@@ -1313,7 +1313,7 @@ async function confirmStopTrip(e) {
 }
 
 function cancelTrip() {
-  if (!confirm('Annuler la course en cours sans l'enregistrer ?')) return;
+  if (!confirm("Annuler la course en cours sans l'enregistrer ?")) return;
   localStorage.removeItem(LS_ACTIVE_TRIP);
   clearInterval(tripTimerInterval);
   tripTimerInterval = null;
