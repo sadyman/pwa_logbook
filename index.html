@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1a2e">
+<title>Logbook Livreur</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+:root{
+  --bg:#1a1a2e;--bg2:#16213e;--bg3:#0f3460;--accent:#00d4aa;--accent2:#00b894;
+  --warn:#ffd700;--danger:#e74c3c;--text:#eaeaea;--text2:#a0aec0;
+  --rad:12px;--nav-h:64px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none}
+button{cursor:pointer;border:none;font:inherit}
+
+/* Header */
+header{position:sticky;top:0;z-index:100;background:var(--bg2);display:flex;align-items:center;justify-content:space-between;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));border-bottom:1px solid var(--bg3)}
+header h1{font-size:1.1rem;font-weight:700;color:var(--accent)}
+#sync-btn{position:relative;background:var(--bg3);color:var(--text);padding:8px 12px;border-radius:8px;font-size:0.85rem;display:flex;align-items:center;gap:6px}
+#sync-btn:active{opacity:.7}
+#export-btn{background:var(--bg3);color:var(--text2);padding:8px 10px;border-radius:8px;display:flex;align-items:center}
+#export-btn:active{opacity:.7}
+#sync-badge{background:var(--warn);color:#000;border-radius:50%;width:18px;height:18px;font-size:.65rem;font-weight:700;display:none;align-items:center;justify-content:center;position:absolute;top:-6px;right:-6px}
+#sync-badge.visible{display:flex}
+
+/* Main */
+main{padding:0 0 calc(var(--nav-h) + env(safe-area-inset-bottom)) 0}
+
+/* Bottom nav */
+nav{position:fixed;bottom:0;left:0;right:0;z-index:100;background:var(--bg2);display:flex;border-top:1px solid var(--bg3);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:10px 4px 8px;background:none;color:var(--text2);font-size:.65rem;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
+nav button svg{width:22px;height:22px}
+nav button.active{color:var(--accent)}
+
+/* Sections */
+.section{display:none;padding:16px}
+.section.active{display:block}
+
+/* Cards */
+.card{background:var(--bg2);border-radius:var(--rad);padding:16px;margin-bottom:12px}
+.card-title{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:4px}
+.card-value{font-size:1.6rem;font-weight:700;color:var(--text)}
+.card-value.accent{color:var(--accent)}
+.card-value.warn{color:var(--warn)}
+.card-sub{font-size:.75rem;color:var(--text2);margin-top:2px}
+
+/* KPI grid */
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.kpi-wide{grid-column:1/-1}
+
+/* List */
+.list-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.list-header h2{font-size:1rem;font-weight:600}
+.item{background:var(--bg2);border-radius:var(--rad);padding:14px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;transition:background .15s}
+.item:active{background:var(--bg3)}
+.item-left{}
+.item-date{font-size:.75rem;color:var(--text2);margin-bottom:2px}
+.item-main{font-size:.95rem;font-weight:600}
+.item-sub{font-size:.75rem;color:var(--text2);margin-top:2px}
+.item-right{text-align:right}
+.item-amount{font-size:1rem;font-weight:700;color:var(--accent)}
+.item-status{font-size:.65rem;margin-top:4px}
+.status-local{color:var(--text2)}
+.status-synced{color:var(--accent)}
+.status-pending-update,.status-pending-delete{color:var(--warn)}
+.empty{text-align:center;color:var(--text2);padding:48px 16px;font-size:.9rem}
+
+/* FAB */
+.fab{position:fixed;bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));right:16px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;font-size:1.6rem;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,212,170,.4);z-index:90;transition:transform .15s}
+.fab:active{transform:scale(.92)}
+
+/* Modal / Drawer */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:flex-end}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg2);border-radius:var(--rad) var(--rad) 0 0;padding:20px 16px 32px;width:100%;max-height:92dvh;overflow-y:auto;padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.modal-header h3{font-size:1.1rem;font-weight:700}
+.modal-close{background:var(--bg3);color:var(--text2);width:32px;height:32px;border-radius:50%;font-size:1.2rem;display:flex;align-items:center;justify-content:center}
+
+/* Form */
+.field{margin-bottom:14px}
+.field label{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--text2);margin-bottom:5px;font-weight:500}
+.field input,.field select,.field textarea{width:100%;background:var(--bg3);border:1px solid transparent;border-radius:8px;padding:10px 12px;color:var(--text);font-size:1rem;font:inherit;transition:border-color .15s}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
+.field select option{background:var(--bg3)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.field-row .field{margin-bottom:0}
+
+/* Tooltip */
+.tip-btn{background:none;color:var(--text2);font-size:.8rem;padding:0 2px;line-height:1;border-radius:50%}
+.tip-text{display:none;background:var(--bg3);color:var(--text2);font-size:.75rem;padding:8px 10px;border-radius:8px;margin-top:4px;line-height:1.4}
+.tip-text.visible{display:block}
+
+/* Buttons */
+.btn{padding:12px 20px;border-radius:8px;font-size:.95rem;font-weight:600;width:100%;margin-top:8px;transition:opacity .15s}
+.btn:active{opacity:.8}
+.btn-primary{background:var(--accent);color:#000}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-secondary{background:var(--bg3);color:var(--text)}
+.btn-row{display:flex;gap:8px;margin-top:12px}
+.btn-row .btn{margin-top:0}
+
+/* Rapport */
+.rapport-section{margin-bottom:16px}
+.rapport-section h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--bg3)}
+.rapport-row{display:flex;justify-content:space-between;padding:5px 0;font-size:.9rem}
+.rapport-row.total{font-weight:700;color:var(--accent);border-top:1px solid var(--bg3);margin-top:4px;padding-top:8px}
+.rapport-row.impot{color:var(--warn)}
+.year-select{background:var(--bg3);color:var(--text);border:none;border-radius:8px;padding:8px 12px;font-size:.9rem;margin-bottom:16px;width:100%}
+
+/* Toast */
+#toast{position:fixed;bottom:calc(var(--nav-h) + 80px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg3);color:var(--text);padding:10px 20px;border-radius:24px;font-size:.85rem;opacity:0;transition:opacity .3s,transform .3s;z-index:999;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Offline bar */
+#offline-bar{background:var(--warn);color:#000;text-align:center;padding:4px;font-size:.75rem;display:none}
+#offline-bar.visible{display:block}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:2px}
+</style>
+</head>
+<body>
+
+<div id="offline-bar">Hors ligne — les données sont sauvegardées localement</div>
+
+<header>
+  <h1>🚗 Logbook</h1>
+  <div style="display:flex;gap:8px">
+    <button id="export-btn" onclick="exportData()" title="Exporter toutes les données">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+    <button id="sync-btn" onclick="doSync()">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      Synchroniser
+      <span id="sync-badge" class="sync-badge"></span>
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- DASHBOARD -->
+  <section id="s-dashboard" class="section active">
+    <div class="kpi-grid" id="kpi-grid">
+      <div class="card"><div class="card-title">Km affaires</div><div class="card-value accent" id="kpi-km">—</div><div class="card-sub" id="kpi-pct">% usage affaires</div></div>
+      <div class="card"><div class="card-title">Courses</div><div class="card-value" id="kpi-nb">—</div><div class="card-sub">cette année</div></div>
+      <div class="card"><div class="card-title">Revenus bruts</div><div class="card-value accent" id="kpi-rev">—</div><div class="card-sub">courses + tips + primes</div></div>
+      <div class="card"><div class="card-title">Dépenses déd.</div><div class="card-value" id="kpi-dep">—</div><div class="card-sub">× % affaires</div></div>
+      <div class="card kpi-wide"><div class="card-title">Impôt estimé (45 %)</div><div class="card-value warn" id="kpi-tax">—</div><div class="card-sub" id="kpi-net">Revenu net : —</div></div>
+      <div class="card"><div class="card-title">kWh rechargés</div><div class="card-value" id="kpi-kwh">—</div></div>
+      <div class="card"><div class="card-title">En attente sync</div><div class="card-value" id="kpi-pending">0</div></div>
+    </div>
+    <p style="font-size:.75rem;color:var(--text2);text-align:center">Données de l'année en cours</p>
+  </section>
+
+  <!-- COURSES -->
+  <section id="s-courses" class="section">
+    <div class="list-header"><h2>Courses</h2></div>
+    <div id="list-courses"></div>
+  </section>
+
+  <!-- RECHARGES -->
+  <section id="s-recharges" class="section">
+    <div class="list-header"><h2>Recharges électriques</h2></div>
+    <div id="list-recharges"></div>
+  </section>
+
+  <!-- DÉPENSES -->
+  <section id="s-depenses" class="section">
+    <div class="list-header"><h2>Dépenses</h2></div>
+    <div id="list-depenses"></div>
+  </section>
+
+  <!-- RAPPORT -->
+  <section id="s-rapport" class="section">
+    <h2 style="margin-bottom:12px">Rapport annuel</h2>
+    <select class="year-select" id="rapport-year" onchange="renderRapport()"></select>
+    <div id="rapport-content"></div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-secondary" onclick="copyRapport()">📋 Copier TP-80/T2125</button>
+      <button class="btn btn-secondary" onclick="exportData()">⬇ Export JSON</button>
+    </div>
+  </section>
+</main>
+
+<!-- FAB (hidden on dashboard/rapport) -->
+<button class="fab" id="fab" onclick="openForm(currentTab)">+</button>
+
+<!-- BOTTOM NAV -->
+<nav>
+  <button class="active" onclick="goTab('dashboard')" data-tab="dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Tableau
+  </button>
+  <button onclick="goTab('courses')" data-tab="courses">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 17l2-8h18l2 8"/><path d="M5 17v2h2v-2M17 17v2h2v-2"/><path d="M1 17h22"/><circle cx="6" cy="17" r="1" fill="currentColor"/><circle cx="18" cy="17" r="1" fill="currentColor"/></svg>
+    Courses
+  </button>
+  <button onclick="goTab('recharges')" data-tab="recharges">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    Recharges
+  </button>
+  <button onclick="goTab('depenses')" data-tab="depenses">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+    Dépenses
+  </button>
+  <button onclick="goTab('rapport')" data-tab="rapport">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+    Rapport
+  </button>
+</nav>
+
+<!-- MODAL COURSE -->
+<div class="modal-overlay" id="modal-courses">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-courses-title">Nouvelle course</h3>
+      <button class="modal-close" onclick="closeModal('courses')">✕</button>
+    </div>
+    <form id="form-courses" onsubmit="saveRecord(event,'courses')">
+      <input type="hidden" id="c-id">
+      <input type="hidden" id="c-airtableId">
+      <div class="field">
+        <label>Date <button type="button" class="tip-btn" onclick="toggleTip('c-date-tip')">ⓘ</button></label>
+        <div class="tip-text" id="c-date-tip">Date à laquelle vous avez effectué cette session de livraison.</div>
+        <input type="date" id="c-date" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Km début <button type="button" class="tip-btn" onclick="toggleTip('c-kmdebut-tip')">ⓘ</button></label>
+          <div class="tip-text" id="c-kmdebut-tip">Odomètre (tableau de bord) avant de démarrer votre session.</div>
+          <input type="number" id="c-kmdebut" placeholder="ex. 24500.0000" step="0.0001" required>
+        </div>
+        <div class="field">
+          <label>Km fin <button type="button" class="tip-btn" onclick="toggleTip('c-kmfin-tip')">ⓘ</button></label>
+          <div class="tip-text" id="c-kmfin-tip">Odomètre à la fin de la session.</div>
+          <input type="number" id="c-kmfin" placeholder="ex. 24568.0000" step="0.0001" oninput="autoKmAff()">
+        </div>
+      </div>
+      <div class="field">
+        <label>Km affaires <button type="button" class="tip-btn" onclick="toggleTip('c-kmaff-tip')">ⓘ</button></label>
+        <div class="tip-text" id="c-kmaff-tip">Km réellement consacrés aux livraisons. Calculé automatiquement (fin − début) mais ajustable si vous avez fait des détours personnels.</div>
+        <input type="number" id="c-kmaff" placeholder="auto" step="0.0001">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Revenu ($) <button type="button" class="tip-btn" onclick="toggleTip('c-rev-tip')">ⓘ</button></label>
+          <div class="tip-text" id="c-rev-tip">Montant brut reçu de la plateforme (Uber Eats, etc.), hors pourboire.</div>
+          <input type="number" id="c-revenu" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div class="field">
+          <label>Pourboire ($) <button type="button" class="tip-btn" onclick="toggleTip('c-tip-tip')">ⓘ</button></label>
+          <div class="tip-text" id="c-tip-tip">Pourboire reçu via la plateforme. Aussi imposable comme revenu d'entreprise.</div>
+          <input type="number" id="c-pourboire" placeholder="0.00" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Prime ($) <button type="button" class="tip-btn" onclick="toggleTip('c-prime-tip')">ⓘ</button></label>
+          <div class="tip-text" id="c-prime-tip">Bonus ou prime de la plateforme (ex. prime de pointe, quête). Revenu imposable.</div>
+          <input type="number" id="c-prime" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div class="field">
+          <label>Durée (min) <button type="button" class="tip-btn" onclick="toggleTip('c-duree-tip')">ⓘ</button></label>
+          <div class="tip-text" id="c-duree-tip">Durée totale de votre session (utile pour calculer votre taux horaire effectif).</div>
+          <input type="number" id="c-dureemin" placeholder="ex. 120" min="0">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">Enregistrer</button>
+      <button type="button" class="btn btn-danger" id="c-delete-btn" style="display:none" onclick="deleteRecord('courses')">Supprimer</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL RECHARGE -->
+<div class="modal-overlay" id="modal-recharges">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-recharges-title">Nouvelle recharge</h3>
+      <button class="modal-close" onclick="closeModal('recharges')">✕</button>
+    </div>
+    <form id="form-recharges" onsubmit="saveRecord(event,'recharges')">
+      <input type="hidden" id="r-id">
+      <input type="hidden" id="r-airtableId">
+      <div class="field">
+        <label>Date <button type="button" class="tip-btn" onclick="toggleTip('r-date-tip')">ⓘ</button></label>
+        <div class="tip-text" id="r-date-tip">Date de la recharge électrique.</div>
+        <input type="date" id="r-date" required>
+      </div>
+      <div class="field">
+        <label>Lieu <button type="button" class="tip-btn" onclick="toggleTip('r-lieu-tip')">ⓘ</button></label>
+        <div class="tip-text" id="r-lieu-tip">Ex. "Borne FLO maison", "Circuit électrique - Centre Laval". Utile pour distinguer recharges maison vs public.</div>
+        <input type="text" id="r-lieu" list="lieu-options" autocomplete="off" placeholder="ex. Borne FLO maison" required>
+        <datalist id="lieu-options"></datalist>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>kWh <button type="button" class="tip-btn" onclick="toggleTip('r-kwh-tip')">ⓘ</button></label>
+          <div class="tip-text" id="r-kwh-tip">Énergie ajoutée lors de cette recharge (visible dans l'app de la borne FLO ou sur votre compteur).</div>
+          <input type="number" id="r-kwh" placeholder="ex. 30.5" step="0.01" min="0" required>
+        </div>
+        <div class="field">
+          <label>Coût ($) <button type="button" class="tip-btn" onclick="toggleTip('r-cout-tip')">ⓘ</button></label>
+          <div class="tip-text" id="r-cout-tip">Montant total payé pour cette recharge. Pour la borne FLO à domicile, utilisez le tarif Hydro-Québec (environ 0,074 $/kWh). Pour les bornes publiques, le coût facturé.</div>
+          <input type="number" id="r-cout" placeholder="0.00" step="0.01" min="0" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>% affaires <button type="button" class="tip-btn" onclick="toggleTip('r-pct-tip')">ⓘ</button></label>
+        <div class="tip-text" id="r-pct-tip">Proportion de cette recharge dédiée au travail. Correspond à votre % d'usage affaires annuel (visible sur le Dashboard). Ex. si 60 % de vos km sont pour le travail, entrez 60.</div>
+        <input type="number" id="r-pct" placeholder="ex. 60" min="0" max="100" step="1" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Enregistrer</button>
+      <button type="button" class="btn btn-danger" id="r-delete-btn" style="display:none" onclick="deleteRecord('recharges')">Supprimer</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL DÉPENSE -->
+<div class="modal-overlay" id="modal-depenses">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-depenses-title">Nouvelle dépense</h3>
+      <button class="modal-close" onclick="closeModal('depenses')">✕</button>
+    </div>
+    <form id="form-depenses" onsubmit="saveRecord(event,'depenses')">
+      <input type="hidden" id="d-id">
+      <input type="hidden" id="d-airtableId">
+      <div class="field">
+        <label>Date <button type="button" class="tip-btn" onclick="toggleTip('d-date-tip')">ⓘ</button></label>
+        <div class="tip-text" id="d-date-tip">Date de la dépense (facture ou débit).</div>
+        <input type="date" id="d-date" required>
+      </div>
+      <div class="field">
+        <label>Catégorie <button type="button" class="tip-btn" onclick="toggleTip('d-cat-tip')">ⓘ</button></label>
+        <div class="tip-text" id="d-cat-tip">Choisissez la catégorie qui correspond à votre dépense. Chaque catégorie a un traitement fiscal différent.</div>
+        <select id="d-categorie" required onchange="autoDepPct()">
+          <option value="">— choisir —</option>
+          <option value="Téléphone (Fizz)">Téléphone (Fizz)</option>
+          <option value="Entretien véhicule">Entretien véhicule</option>
+          <option value="Assurance véhicule">Assurance véhicule</option>
+          <option value="Immatriculation">Immatriculation</option>
+          <option value="Équipement">Équipement (sac, support…)</option>
+          <option value="Stationnement">Stationnement</option>
+          <option value="Autre">Autre</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Montant ($) <button type="button" class="tip-btn" onclick="toggleTip('d-mnt-tip')">ⓘ</button></label>
+        <div class="tip-text" id="d-mnt-tip">Montant total avant application du % affaires (inscrivez la facture complète).</div>
+        <input type="number" id="d-montant" placeholder="0.00" step="0.01" min="0" required>
+      </div>
+      <div class="field">
+        <label>% affaires <button type="button" class="tip-btn" onclick="toggleTip('d-pct-tip')">ⓘ</button></label>
+        <div class="tip-text" id="d-pct-tip">Équipement et stationnement = 100 % (usage exclusif affaires). Véhicule/assurance/immatriculation = votre % usage affaires (voir Dashboard). Téléphone Fizz = % raisonnable (ex. 30-50 %).</div>
+        <input type="number" id="d-pct" placeholder="ex. 60" min="0" max="100" step="1" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Enregistrer</button>
+      <button type="button" class="btn btn-danger" id="d-delete-btn" style="display:none" onclick="deleteRecord('depenses')">Supprimer</button>
+    </form>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── DB ───────────────────────────────────────────────────────────────────────
+let db;
+const DB_NAME = 'logbook', DB_VERSION = 1;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      ['courses','recharges','depenses'].forEach(name => {
+        if (!d.objectStoreNames.contains(name)) {
+          d.createObjectStore(name, { keyPath: 'id', autoIncrement: true });
+        }
+      });
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(db); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function tx(store, mode = 'readonly') {
+  return db.transaction(store, mode).objectStore(store);
+}
+
+function dbGetAll(store) {
+  return new Promise((res, rej) => {
+    const req = tx(store).getAll();
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+function dbGet(store, id) {
+  return new Promise((res, rej) => {
+    const req = tx(store).get(id);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+function dbPut(store, record) {
+  return new Promise((res, rej) => {
+    const req = tx(store, 'readwrite').put(record);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+function dbDelete(store, id) {
+  return new Promise((res, rej) => {
+    const req = tx(store, 'readwrite').delete(id);
+    req.onsuccess = () => res();
+    req.onerror = () => rej(req.error);
+  });
+}
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let currentTab = 'dashboard';
+let editingRecord = null;
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+function goTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('s-' + tab).classList.add('active');
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  const fab = document.getElementById('fab');
+  fab.style.display = (tab === 'dashboard' || tab === 'rapport') ? 'none' : 'flex';
+  if (tab === 'courses') renderList('courses');
+  if (tab === 'recharges') renderList('recharges');
+  if (tab === 'depenses') renderList('depenses');
+  if (tab === 'dashboard') renderDashboard();
+  if (tab === 'rapport') renderRapport();
+}
+
+// ─── Form helpers ─────────────────────────────────────────────────────────────
+function openForm(tab) {
+  if (!['courses','recharges','depenses'].includes(tab)) return;
+  editingRecord = null;
+  const titles = { courses: 'Nouvelle course', recharges: 'Nouvelle recharge', depenses: 'Nouvelle dépense' };
+  document.getElementById('modal-' + tab + '-title').textContent = titles[tab];
+  clearForm(tab);
+  // default today
+  const today = new Date().toISOString().slice(0, 10);
+  const dateField = document.getElementById(tab[0] + '-date') || document.getElementById('c-date');
+  if (tab === 'courses') document.getElementById('c-date').value = today;
+  if (tab === 'recharges') { document.getElementById('r-date').value = today; populateLieuDatalist(); }
+  if (tab === 'depenses') document.getElementById('d-date').value = today;
+  // hide delete
+  document.getElementById(tab[0] + '-delete-btn').style.display = 'none';
+  document.getElementById('modal-' + tab).classList.add('open');
+}
+
+function openEdit(tab, record) {
+  editingRecord = record;
+  const titles = { courses: 'Modifier la course', recharges: 'Modifier la recharge', depenses: 'Modifier la dépense' };
+  document.getElementById('modal-' + tab + '-title').textContent = titles[tab];
+  fillForm(tab, record);
+  if (tab === 'recharges') populateLieuDatalist();
+  document.getElementById(tab[0] + '-delete-btn').style.display = 'block';
+  document.getElementById('modal-' + tab).classList.add('open');
+}
+
+function closeModal(tab) {
+  document.getElementById('modal-' + tab).classList.remove('open');
+}
+
+function clearForm(tab) {
+  document.getElementById(tab[0] + '-id').value = '';
+  document.getElementById(tab[0] + '-airtableId').value = '';
+  if (tab === 'courses') {
+    ['c-date','c-kmdebut','c-kmfin','c-kmaff','c-revenu','c-pourboire','c-prime','c-dureemin']
+      .forEach(id => document.getElementById(id).value = '');
+  } else if (tab === 'recharges') {
+    ['r-date','r-lieu','r-kwh','r-cout','r-pct']
+      .forEach(id => document.getElementById(id).value = '');
+  } else {
+    ['d-date','d-montant','d-pct'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('d-categorie').value = '';
+  }
+}
+
+function fillForm(tab, r) {
+  clearForm(tab);
+  if (tab === 'courses') {
+    document.getElementById('c-id').value = r.id || '';
+    document.getElementById('c-airtableId').value = r.airtableId || '';
+    document.getElementById('c-date').value = r.date || '';
+    document.getElementById('c-kmdebut').value = r.kmDebut || '';
+    document.getElementById('c-kmfin').value = r.kmFin || '';
+    document.getElementById('c-kmaff').value = r.kmAffaires || '';
+    document.getElementById('c-revenu').value = r.revenu || '';
+    document.getElementById('c-pourboire').value = r.pourboire || '';
+    document.getElementById('c-prime').value = r.prime || '';
+    document.getElementById('c-dureemin').value = r.dureeMin || '';
+  } else if (tab === 'recharges') {
+    document.getElementById('r-id').value = r.id || '';
+    document.getElementById('r-airtableId').value = r.airtableId || '';
+    document.getElementById('r-date').value = r.date || '';
+    document.getElementById('r-lieu').value = r.lieu || '';
+    document.getElementById('r-kwh').value = r.kwh || '';
+    document.getElementById('r-cout').value = r.cout || '';
+    document.getElementById('r-pct').value = r.pctAffaires || '';
+  } else {
+    document.getElementById('d-id').value = r.id || '';
+    document.getElementById('d-airtableId').value = r.airtableId || '';
+    document.getElementById('d-date').value = r.date || '';
+    document.getElementById('d-categorie').value = r.categorie || '';
+    document.getElementById('d-montant').value = r.montant || '';
+    document.getElementById('d-pct').value = r.pctAffaires || '';
+  }
+}
+
+function getFormData(tab) {
+  if (tab === 'courses') {
+    return {
+      date: document.getElementById('c-date').value,
+      kmDebut: +document.getElementById('c-kmdebut').value || 0,
+      kmFin: +document.getElementById('c-kmfin').value || 0,
+      kmAffaires: +document.getElementById('c-kmaff').value || 0,
+      revenu: +document.getElementById('c-revenu').value || 0,
+      pourboire: +document.getElementById('c-pourboire').value || 0,
+      prime: +document.getElementById('c-prime').value || 0,
+      dureeMin: +document.getElementById('c-dureemin').value || 0,
+    };
+  } else if (tab === 'recharges') {
+    return {
+      date: document.getElementById('r-date').value,
+      lieu: document.getElementById('r-lieu').value.trim(),
+      kwh: +document.getElementById('r-kwh').value || 0,
+      cout: +document.getElementById('r-cout').value || 0,
+      pctAffaires: +document.getElementById('r-pct').value || 0,
+    };
+  } else {
+    return {
+      date: document.getElementById('d-date').value,
+      categorie: document.getElementById('d-categorie').value,
+      montant: +document.getElementById('d-montant').value || 0,
+      pctAffaires: +document.getElementById('d-pct').value || 0,
+    };
+  }
+}
+
+async function saveRecord(e, tab) {
+  e.preventDefault();
+  const data = getFormData(tab);
+  const existingId = document.getElementById(tab[0] + '-id').value;
+  const existingAirtableId = document.getElementById(tab[0] + '-airtableId').value;
+  let record;
+  if (existingId) {
+    record = { ...data, id: +existingId, airtableId: existingAirtableId || null, _status: existingAirtableId ? 'pending-update' : 'local' };
+  } else {
+    record = { ...data, airtableId: null, _status: 'local' };
+  }
+  await dbPut(tab, record);
+  closeModal(tab);
+  renderList(tab);
+  renderDashboard();
+  updateSyncBadge();
+  showToast('Enregistré ✓');
+}
+
+async function deleteRecord(tab) {
+  if (!editingRecord) return;
+  if (!confirm('Supprimer cet enregistrement ?')) return;
+  const r = editingRecord;
+  if (r.airtableId) {
+    // Mark for remote deletion
+    await dbPut(tab, { ...r, _status: 'pending-delete' });
+  } else {
+    await dbDelete(tab, r.id);
+  }
+  closeModal(tab);
+  renderList(tab);
+  renderDashboard();
+  updateSyncBadge();
+  showToast('Supprimé');
+}
+
+// ─── Auto-fill helpers ────────────────────────────────────────────────────────
+function autoKmAff() {
+  const debut = +document.getElementById('c-kmdebut').value || 0;
+  const fin = +document.getElementById('c-kmfin').value || 0;
+  if (fin > debut) document.getElementById('c-kmaff').value = (fin - debut).toFixed(4);
+}
+
+async function populateLieuDatalist() {
+  const recharges = await dbGetAll('recharges');
+  const lieux = [...new Set(recharges.map(r => r.lieu).filter(Boolean))].sort();
+  document.getElementById('lieu-options').innerHTML = lieux.map(l => `<option value="${l}">`).join('');
+}
+
+const DEP_PCT = {
+  'Équipement': 100, 'Stationnement': 100,
+  'Entretien véhicule': '', 'Assurance véhicule': '', 'Immatriculation': '',
+  'Téléphone (Fizz)': 40,
+};
+function autoDepPct() {
+  const cat = document.getElementById('d-categorie').value;
+  const v = DEP_PCT[cat];
+  if (v !== undefined && v !== '') document.getElementById('d-pct').value = v;
+}
+
+// ─── Tooltips ─────────────────────────────────────────────────────────────────
+function toggleTip(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('visible');
+}
+
+// ─── Lists ────────────────────────────────────────────────────────────────────
+function fmtDate(d) {
+  if (!d) return '';
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
+}
+function fmtMoney(n) { return n ? n.toFixed(2) + ' $' : '—'; }
+function fmtKm(n) { return n ? n.toFixed(1) + ' km' : '—'; }
+
+async function renderList(tab) {
+  const all = await dbGetAll(tab);
+  const el = document.getElementById('list-' + tab);
+  // Filter out pending-delete for display
+  const visible = all.filter(r => r._status !== 'pending-delete');
+  if (!visible.length) { el.innerHTML = '<p class="empty">Aucune entrée pour l\'instant</p>'; return; }
+  // Sort by date desc
+  visible.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (tab === 'courses') {
+    el.innerHTML = visible.map(r => `
+      <div class="item" onclick="openEdit('courses', ${JSON.stringify(r).replace(/"/g, '&quot;')})">
+        <div class="item-left">
+          <div class="item-date">${fmtDate(r.date)}</div>
+          <div class="item-main">${fmtKm(r.kmAffaires)} affaires</div>
+          <div class="item-sub">${r.kmDebut} → ${r.kmFin} km · ${r.dureeMin || '?'} min</div>
+        </div>
+        <div class="item-right">
+          <div class="item-amount">${fmtMoney((r.revenu||0)+(r.pourboire||0)+(r.prime||0))}</div>
+          <div class="item-status status-${r._status}">${statusLabel(r._status)}</div>
+        </div>
+      </div>`).join('');
+  } else if (tab === 'recharges') {
+    el.innerHTML = visible.map(r => `
+      <div class="item" onclick="openEdit('recharges', ${JSON.stringify(r).replace(/"/g, '&quot;')})">
+        <div class="item-left">
+          <div class="item-date">${fmtDate(r.date)}</div>
+          <div class="item-main">${r.lieu || '—'}</div>
+          <div class="item-sub">${r.kwh || 0} kWh · ${r.pctAffaires || 0} % affaires</div>
+        </div>
+        <div class="item-right">
+          <div class="item-amount">${fmtMoney(r.cout)}</div>
+          <div class="item-status status-${r._status}">${statusLabel(r._status)}</div>
+        </div>
+      </div>`).join('');
+  } else {
+    el.innerHTML = visible.map(r => `
+      <div class="item" onclick="openEdit('depenses', ${JSON.stringify(r).replace(/"/g, '&quot;')})">
+        <div class="item-left">
+          <div class="item-date">${fmtDate(r.date)}</div>
+          <div class="item-main">${r.categorie || '—'}</div>
+          <div class="item-sub">${r.pctAffaires || 0} % affaires → ${fmtMoney((r.montant||0)*(r.pctAffaires||0)/100)}</div>
+        </div>
+        <div class="item-right">
+          <div class="item-amount">${fmtMoney(r.montant)}</div>
+          <div class="item-status status-${r._status}">${statusLabel(r._status)}</div>
+        </div>
+      </div>`).join('');
+  }
+}
+
+function statusLabel(s) {
+  return { local: '◌ local', synced: '✓ sync', 'pending-update': '↑ màj', 'pending-delete': '✕ suppr' }[s] || s;
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+async function renderDashboard() {
+  const year = new Date().getFullYear().toString();
+  const [courses, recharges, depenses] = await Promise.all([
+    dbGetAll('courses'), dbGetAll('recharges'), dbGetAll('depenses')
+  ]);
+
+  const cy = courses.filter(r => (r.date || '').startsWith(year) && r._status !== 'pending-delete');
+  const ry = recharges.filter(r => (r.date || '').startsWith(year) && r._status !== 'pending-delete');
+  const dy = depenses.filter(r => (r.date || '').startsWith(year) && r._status !== 'pending-delete');
+
+  const kmAff = cy.reduce((s, r) => s + (r.kmAffaires || 0), 0);
+  const revenus = cy.reduce((s, r) => s + (r.revenu||0) + (r.pourboire||0) + (r.prime||0), 0);
+  const kwh = ry.reduce((s, r) => s + (r.kwh || 0), 0);
+  const depTotal = dy.reduce((s, r) => s + (r.montant||0)*(r.pctAffaires||0)/100, 0)
+    + ry.reduce((s, r) => s + (r.cout||0)*(r.pctAffaires||0)/100, 0);
+
+  // km total = last kmFin - first kmDebut (if available)
+  const sortedC = [...cy].sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  let pct = 0;
+  if (sortedC.length >= 1) {
+    const firstKmDebut = sortedC[0].kmDebut || 0;
+    const lastKmFin = sortedC[sortedC.length - 1].kmFin || 0;
+    const kmTotal = lastKmFin - firstKmDebut;
+    pct = kmTotal > 0 ? Math.round(kmAff / kmTotal * 100) : 0;
+  }
+
+  const revNet = revenus - depTotal;
+  const tax = revNet > 0 ? revNet * 0.45 : 0;
+
+  const pending = [...courses, ...recharges, ...depenses]
+    .filter(r => r._status !== 'synced').length;
+
+  document.getElementById('kpi-km').textContent = kmAff.toFixed(1) + ' km';
+  document.getElementById('kpi-pct').textContent = pct + ' % usage affaires';
+  document.getElementById('kpi-nb').textContent = cy.length;
+  document.getElementById('kpi-rev').textContent = revenus.toFixed(2) + ' $';
+  document.getElementById('kpi-dep').textContent = depTotal.toFixed(2) + ' $';
+  document.getElementById('kpi-net').textContent = 'Revenu net : ' + revNet.toFixed(2) + ' $';
+  document.getElementById('kpi-tax').textContent = tax.toFixed(2) + ' $';
+  document.getElementById('kpi-kwh').textContent = kwh.toFixed(1) + ' kWh';
+  document.getElementById('kpi-pending').textContent = pending;
+  updateSyncBadge(pending);
+}
+
+// ─── Rapport annuel ───────────────────────────────────────────────────────────
+async function renderRapport() {
+  const yearSel = document.getElementById('rapport-year');
+  // populate years
+  const [courses, recharges, depenses] = await Promise.all([
+    dbGetAll('courses'), dbGetAll('recharges'), dbGetAll('depenses')
+  ]);
+  const allDates = [...courses, ...recharges, ...depenses].map(r => (r.date||'').slice(0,4)).filter(Boolean);
+  const years = [...new Set(allDates)].sort().reverse();
+  const curYear = new Date().getFullYear().toString();
+  if (!years.includes(curYear)) years.unshift(curYear);
+  yearSel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+
+  const year = yearSel.value || curYear;
+  const cy = courses.filter(r => (r.date||'').startsWith(year) && r._status !== 'pending-delete');
+  const ry = recharges.filter(r => (r.date||'').startsWith(year) && r._status !== 'pending-delete');
+  const dy = depenses.filter(r => (r.date||'').startsWith(year) && r._status !== 'pending-delete');
+
+  const revCourses = cy.reduce((s, r) => s + (r.revenu||0), 0);
+  const revTips = cy.reduce((s, r) => s + (r.pourboire||0), 0);
+  const revPrimes = cy.reduce((s, r) => s + (r.prime||0), 0);
+  const revTotal = revCourses + revTips + revPrimes;
+
+  const kmAff = cy.reduce((s, r) => s + (r.kmAffaires||0), 0);
+  const sortedC = [...cy].sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  let kmTotal = 0, pct = 0;
+  if (sortedC.length) {
+    kmTotal = (sortedC[sortedC.length-1].kmFin||0) - (sortedC[0].kmDebut||0);
+    pct = kmTotal > 0 ? Math.round(kmAff / kmTotal * 100) : 0;
+  }
+
+  // Dépenses par catégorie
+  const CAT_ORDER = ['Entretien véhicule','Assurance véhicule','Immatriculation','Téléphone (Fizz)','Équipement','Stationnement','Autre'];
+  const catTotals = {};
+  for (const r of dy) {
+    const ded = (r.montant||0) * (r.pctAffaires||0) / 100;
+    catTotals[r.categorie] = (catTotals[r.categorie] || 0) + ded;
+  }
+  const rechargesDed = ry.reduce((s,r) => s + (r.cout||0)*(r.pctAffaires||0)/100, 0);
+  const depTotal = Object.values(catTotals).reduce((s,v) => s+v, 0) + rechargesDed;
+  const revNet = revTotal - depTotal;
+  const tax = revNet > 0 ? revNet * 0.45 : 0;
+
+  const depRows = CAT_ORDER.filter(c => catTotals[c])
+    .map(c => `<div class="rapport-row"><span>${c}</span><span>${catTotals[c].toFixed(2)} $</span></div>`)
+    .join('');
+
+  document.getElementById('rapport-content').innerHTML = `
+    <div class="rapport-section">
+      <h3>Véhicule</h3>
+      <div class="rapport-row"><span>Km totaux parcourus</span><span>${kmTotal.toFixed(1)} km</span></div>
+      <div class="rapport-row"><span>Km d'affaires</span><span>${kmAff.toFixed(1)} km</span></div>
+      <div class="rapport-row total"><span>% usage affaires</span><span>${pct} %</span></div>
+    </div>
+    <div class="rapport-section">
+      <h3>Revenus (TP-80 ligne 164 / T2125 Part 2)</h3>
+      <div class="rapport-row"><span>Revenus courses</span><span>${revCourses.toFixed(2)} $</span></div>
+      <div class="rapport-row"><span>Pourboires</span><span>${revTips.toFixed(2)} $</span></div>
+      <div class="rapport-row"><span>Primes</span><span>${revPrimes.toFixed(2)} $</span></div>
+      <div class="rapport-row total"><span>Total revenus</span><span>${revTotal.toFixed(2)} $</span></div>
+    </div>
+    <div class="rapport-section">
+      <h3>Dépenses déductibles (TP-80 / T2125 Part 4)</h3>
+      <div class="rapport-row"><span>Recharges électriques FLO (× ${pct}%)</span><span>${rechargesDed.toFixed(2)} $</span></div>
+      ${depRows}
+      <div class="rapport-row total"><span>Total dépenses</span><span>${depTotal.toFixed(2)} $</span></div>
+    </div>
+    <div class="rapport-section">
+      <h3>Résultat</h3>
+      <div class="rapport-row"><span>Revenu net d'entreprise</span><span>${revNet.toFixed(2)} $</span></div>
+      <div class="rapport-row impot total"><span>Impôt estimé (45 %)</span><span>${tax.toFixed(2)} $</span></div>
+    </div>`;
+}
+
+function copyRapport() {
+  const el = document.getElementById('rapport-content');
+  const year = document.getElementById('rapport-year').value;
+  let text = `RAPPORT ANNUEL ${year} — Logbook Livreur\n${'─'.repeat(40)}\n\n`;
+  el.querySelectorAll('.rapport-section').forEach(sec => {
+    text += sec.querySelector('h3').textContent + '\n';
+    sec.querySelectorAll('.rapport-row').forEach(row => {
+      const [l, r] = row.querySelectorAll('span');
+      text += `  ${l.textContent.padEnd(38)} ${r.textContent}\n`;
+    });
+    text += '\n';
+  });
+  navigator.clipboard.writeText(text).then(() => showToast('Copié ✓')).catch(() => showToast('Erreur copie'));
+}
+
+// ─── Sync ─────────────────────────────────────────────────────────────────────
+async function updateSyncBadge(n) {
+  if (n === undefined) {
+    const [c, r, d] = await Promise.all([dbGetAll('courses'), dbGetAll('recharges'), dbGetAll('depenses')]);
+    n = [...c,...r,...d].filter(x => x._status !== 'synced').length;
+  }
+  const badge = document.getElementById('sync-badge');
+  badge.textContent = n;
+  badge.classList.toggle('visible', n > 0);
+}
+
+async function doSync() {
+  const btn = document.getElementById('sync-btn');
+  btn.disabled = true;
+  btn.style.opacity = '.6';
+
+  try {
+    const payload = [];
+    for (const tab of ['courses','recharges','depenses']) {
+      const all = await dbGetAll(tab);
+      for (const r of all) {
+        const { id, airtableId, _status, ...p } = r;
+        if (_status === 'pending-delete') {
+          payload.push({ table: tab, action: 'delete', localId: id, airtableId });
+        } else if (airtableId) {
+          payload.push({ table: tab, action: 'update', localId: id, airtableId, payload: p });
+        } else {
+          payload.push({ table: tab, action: 'create', localId: id, payload: p });
+        }
+      }
+    }
+
+    if (!payload.length) { showToast('Aucune donnée à synchroniser'); return; }
+
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.error || `Serveur ${res.status}`);
+    }
+    const results = await res.json();
+
+    let ok = 0, fail = 0;
+    for (const r of results) {
+      const item = payload.find(p => p.localId === r.localId);
+      if (!item) continue;
+      if (r.success) {
+        if (item.action === 'delete') {
+          await dbDelete(item.table, r.localId);
+        } else {
+          const rec = await dbGet(item.table, r.localId);
+          if (rec) await dbPut(item.table, { ...rec, airtableId: r.airtableId, _status: 'synced' });
+        }
+        ok++;
+      } else {
+        fail++;
+      }
+    }
+
+    showToast(fail === 0
+      ? `${ok} synchronisé${ok > 1 ? 's' : ''} ✓`
+      : `${ok} ✓  ·  ${fail} erreur${fail > 1 ? 's' : ''}`
+    );
+    renderDashboard();
+    if (currentTab !== 'dashboard' && currentTab !== 'rapport') renderList(currentTab);
+  } catch (err) {
+    showToast('Erreur : ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    updateSyncBadge();
+  }
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ─── Online/offline ───────────────────────────────────────────────────────────
+function updateOfflineBar() {
+  document.getElementById('offline-bar').classList.toggle('visible', !navigator.onLine);
+}
+window.addEventListener('online', updateOfflineBar);
+window.addEventListener('offline', updateOfflineBar);
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+});
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+async function exportData() {
+  const [courses, recharges, depenses] = await Promise.all([
+    dbGetAll('courses'), dbGetAll('recharges'), dbGetAll('depenses')
+  ]);
+  const data = { version: 1, exportedAt: new Date().toISOString(), courses, recharges, depenses };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `logbook-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Export téléchargé ✓');
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  await openDB();
+  updateOfflineBar();
+  renderDashboard();
+  updateSyncBadge();
+  goTab('dashboard');
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+}
+
+init();
+</script>
+</body>
+</html>
