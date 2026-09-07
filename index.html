@@ -26,8 +26,9 @@ header{position:sticky;top:0;z-index:100;background:var(--bg2);display:flex;alig
 header h1{font-size:1.1rem;font-weight:700;color:var(--accent)}
 #sync-btn{position:relative;background:var(--bg3);color:var(--text);padding:8px 12px;border-radius:8px;font-size:0.85rem;display:flex;align-items:center;gap:6px}
 #sync-btn:active{opacity:.7}
-#export-btn{background:var(--bg3);color:var(--text2);padding:8px 10px;border-radius:8px;display:flex;align-items:center}
-#export-btn:active{opacity:.7}
+#export-btn,#settings-btn{background:var(--bg3);color:var(--text2);padding:8px 10px;border-radius:8px;display:flex;align-items:center}
+#export-btn:active,#settings-btn:active{opacity:.7}
+#settings-btn.configured{color:var(--accent)}
 #sync-badge{background:var(--warn);color:#000;border-radius:50%;width:18px;height:18px;font-size:.65rem;font-weight:700;display:none;align-items:center;justify-content:center;position:absolute;top:-6px;right:-6px}
 #sync-badge.visible{display:flex}
 
@@ -137,6 +138,9 @@ nav button.active{color:var(--accent)}
 <header>
   <h1>🚗 Logbook</h1>
   <div style="display:flex;gap:8px">
+    <button id="settings-btn" onclick="openSettings()" title="Paramètres Airtable">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
     <button id="export-btn" onclick="exportData()" title="Exporter toutes les données">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
@@ -372,6 +376,35 @@ nav button.active{color:var(--accent)}
       <button type="submit" class="btn btn-primary">Enregistrer</button>
       <button type="button" class="btn btn-danger" id="d-delete-btn" style="display:none" onclick="deleteRecord('depenses')">Supprimer</button>
     </form>
+  </div>
+</div>
+
+<!-- MODAL PARAMÈTRES -->
+<div class="modal-overlay" id="modal-settings">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Paramètres Airtable</h3>
+      <button class="modal-close" onclick="closeModal('settings')">✕</button>
+    </div>
+    <p style="font-size:.8rem;color:var(--text2);margin-bottom:16px;line-height:1.5">
+      Ces valeurs sont stockées uniquement sur cet appareil (localStorage).<br>
+      Elles ne sont jamais envoyées nulle part sauf vers Airtable.
+    </p>
+    <div class="field">
+      <label>Token Airtable (TK_LOGBOOK_UBER) <button type="button" class="tip-btn" onclick="toggleTip('s-token-tip')">ⓘ</button></label>
+      <div class="tip-text" id="s-token-tip">Personal Access Token créé dans airtable.com → Account → Developer Hub. Nécessaire uniquement en local ou si pas de Cloudflare Pages.</div>
+      <input type="password" id="s-token" placeholder="patXXXXXXXX…" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Base ID (logbook_uber) <button type="button" class="tip-btn" onclick="toggleTip('s-base-tip')">ⓘ</button></label>
+      <div class="tip-text" id="s-base-tip">Visible dans l'URL Airtable : airtable.com/appXXXXXX/…</div>
+      <input type="text" id="s-base" placeholder="appXXXXXXXXXXXXXX">
+    </div>
+    <div id="s-mode-info" style="font-size:.75rem;margin-bottom:8px;padding:8px;background:var(--bg3);border-radius:8px;color:var(--text2)"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
+      <button class="btn btn-danger" onclick="clearSettings()">Effacer</button>
+    </div>
   </div>
 </div>
 
@@ -825,6 +858,111 @@ function copyRapport() {
   navigator.clipboard.writeText(text).then(() => showToast('Copié ✓')).catch(() => showToast('Erreur copie'));
 }
 
+// ─── Paramètres (localStorage) ────────────────────────────────────────────────
+const LS_TOKEN   = 'lb_at_token';
+const LS_BASE_ID = 'lb_at_base';
+
+function getLocalCreds() {
+  return { token: localStorage.getItem(LS_TOKEN), baseId: localStorage.getItem(LS_BASE_ID) };
+}
+
+function openSettings() {
+  const { token, baseId } = getLocalCreds();
+  document.getElementById('s-token').value = token || '';
+  document.getElementById('s-base').value  = baseId || '';
+  updateSettingsMode();
+  document.getElementById('modal-settings').classList.add('open');
+}
+
+function updateSettingsMode() {
+  const { token, baseId } = getLocalCreds();
+  const info = document.getElementById('s-mode-info');
+  const btn  = document.getElementById('settings-btn');
+  if (token && baseId) {
+    info.textContent = '✓ Mode local actif — sync appelle Airtable directement depuis cet appareil.';
+    info.style.color = 'var(--accent)';
+    btn.classList.add('configured');
+  } else {
+    info.textContent = '○ Mode déployé — sync via /api/sync (Cloudflare Pages Function).';
+    info.style.color = 'var(--text2)';
+    btn.classList.remove('configured');
+  }
+}
+
+function saveSettings() {
+  const token  = document.getElementById('s-token').value.trim();
+  const baseId = document.getElementById('s-base').value.trim();
+  if (token)  localStorage.setItem(LS_TOKEN, token);   else localStorage.removeItem(LS_TOKEN);
+  if (baseId) localStorage.setItem(LS_BASE_ID, baseId); else localStorage.removeItem(LS_BASE_ID);
+  updateSettingsMode();
+  closeModal('settings');
+  showToast('Paramètres enregistrés ✓');
+}
+
+function clearSettings() {
+  if (!confirm('Effacer le token et le Base ID de cet appareil ?')) return;
+  localStorage.removeItem(LS_TOKEN);
+  localStorage.removeItem(LS_BASE_ID);
+  document.getElementById('s-token').value = '';
+  document.getElementById('s-base').value  = '';
+  updateSettingsMode();
+  showToast('Paramètres effacés');
+}
+
+// ─── Airtable direct (mode local) ─────────────────────────────────────────────
+const AT_TABLE_MAP = { courses: 'Courses', recharges: 'Recharges', depenses: 'Depenses' };
+const AT_FIELD_MAP = {
+  courses:   { date:'Date', kmDebut:'KmDebut', kmFin:'KmFin', kmAffaires:'KmAffaires', revenu:'Revenu', pourboire:'Pourboire', prime:'Prime', dureeMin:'DureeMin' },
+  recharges: { date:'Date', lieu:'Lieu', kwh:'Kwh', cout:'Cout', pctAffaires:'PctAffaires' },
+  depenses:  { date:'Date', categorie:'Categorie', montant:'Montant', pctAffaires:'PctAffaires' },
+};
+
+function toAirtableFields(table, payload) {
+  const map = AT_FIELD_MAP[table] || {};
+  const fields = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (map[k] !== undefined) fields[map[k]] = v;
+  }
+  return fields;
+}
+
+async function atDirect(method, path, body, token, baseId) {
+  const res = await fetch(`https://api.airtable.com/v0/${baseId}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error?.message || `Airtable ${res.status}`);
+  }
+  return res.status !== 204 ? res.json() : null;
+}
+
+async function processDirect(payload, token, baseId) {
+  return Promise.all(payload.map(async item => {
+    const { table, action, localId, payload: p, airtableId } = item;
+    const tbl = AT_TABLE_MAP[table];
+    try {
+      if (action === 'create') {
+        const data = await atDirect('POST', `/${tbl}`, { fields: toAirtableFields(table, p) }, token, baseId);
+        return { localId, airtableId: data.id, success: true };
+      } else if (action === 'update') {
+        if (!airtableId) return { localId, success: false, error: 'Missing airtableId' };
+        await atDirect('PATCH', `/${tbl}/${airtableId}`, { fields: toAirtableFields(table, p) }, token, baseId);
+        return { localId, airtableId, success: true };
+      } else if (action === 'delete') {
+        if (!airtableId) return { localId, success: true };
+        await atDirect('DELETE', `/${tbl}/${airtableId}`, null, token, baseId);
+        return { localId, airtableId, success: true };
+      }
+      return { localId, success: false, error: 'Unknown action' };
+    } catch (err) {
+      return { localId, airtableId, success: false, error: err.message };
+    }
+  }));
+}
+
 // ─── Sync ─────────────────────────────────────────────────────────────────────
 async function updateSyncBadge(n) {
   if (n === undefined) {
@@ -842,6 +980,7 @@ async function doSync() {
   btn.style.opacity = '.6';
 
   try {
+    // Construire le payload
     const payload = [];
     for (const tab of ['courses','recharges','depenses']) {
       const all = await dbGetAll(tab);
@@ -859,17 +998,32 @@ async function doSync() {
 
     if (!payload.length) { showToast('Aucune donnée à synchroniser'); return; }
 
-    const res = await fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.error || `Serveur ${res.status}`);
-    }
-    const results = await res.json();
+    // Choix du mode : local (token en localStorage) ou serveur (Cloudflare Pages)
+    const { token, baseId } = getLocalCreds();
+    let results;
 
+    if (token && baseId) {
+      // Mode local — appel Airtable direct depuis le navigateur
+      results = await processDirect(payload, token, baseId);
+    } else {
+      // Mode déployé — via Cloudflare Pages Function /api/sync
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        const is404 = res.status === 404;
+        throw new Error(is404
+          ? 'Endpoint /api/sync introuvable — configure le token dans ⚙ Paramètres pour le mode local'
+          : (e.error || `Serveur ${res.status}`)
+        );
+      }
+      results = await res.json();
+    }
+
+    // Appliquer les résultats dans IndexedDB
     let ok = 0, fail = 0;
     for (const r of results) {
       const item = payload.find(p => p.localId === r.localId);
@@ -988,6 +1142,7 @@ async function handleImport(e) {
 async function init() {
   await openDB();
   updateOfflineBar();
+  updateSettingsMode();
   renderDashboard();
   updateSyncBadge();
   goTab('dashboard');
