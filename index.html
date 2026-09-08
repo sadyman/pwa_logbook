@@ -115,6 +115,13 @@ nav button.active{color:var(--accent)}
 .rapport-row{display:flex;justify-content:space-between;padding:5px 0;font-size:.9rem}
 .rapport-row.total{font-weight:700;color:var(--accent);border-top:1px solid var(--bg3);margin-top:4px;padding-top:8px}
 .rapport-row.impot{color:var(--warn)}
+.rapport-row.credit{color:#48bb78}
+.rapport-row.sub{padding-left:12px;font-size:.82rem;color:var(--text2)}
+.rapport-row.win{font-weight:600;color:var(--accent)}
+.fiscal-note{font-size:.74rem;color:var(--text2);background:var(--bg3);border-radius:8px;padding:8px 10px;margin-top:8px;line-height:1.6}
+.fiscal-badge{display:inline-block;font-size:.65rem;font-weight:700;padding:2px 6px;border-radius:10px;vertical-align:middle;margin-left:4px}
+.badge-ok{background:rgba(72,187,120,.2);color:#48bb78}
+.badge-warn{background:rgba(255,215,0,.15);color:var(--warn)}
 .year-select{background:var(--bg3);color:var(--text);border:none;border-radius:8px;padding:8px 12px;font-size:.9rem;margin-bottom:16px;width:100%}
 
 /* Toast */
@@ -206,8 +213,8 @@ nav button.active{color:var(--accent)}
       <div class="card"><div class="card-title">Km affaires</div><div class="card-value accent" id="kpi-km">—</div><div class="card-sub" id="kpi-pct">% usage affaires</div></div>
       <div class="card"><div class="card-title">Courses</div><div class="card-value" id="kpi-nb">—</div><div class="card-sub">cette année</div></div>
       <div class="card"><div class="card-title">Revenus bruts</div><div class="card-value accent" id="kpi-rev">—</div><div class="card-sub">courses + tips + primes</div></div>
-      <div class="card"><div class="card-title">Dépenses déd.</div><div class="card-value" id="kpi-dep">—</div><div class="card-sub">× % affaires</div></div>
-      <div class="card kpi-wide"><div class="card-title">Impôt estimé (45 %)</div><div class="card-value warn" id="kpi-tax">—</div><div class="card-sub" id="kpi-net">Revenu net : —</div></div>
+      <div class="card"><div class="card-title">Déductions (réelle)</div><div class="card-value" id="kpi-dep">—</div><div class="card-sub" id="kpi-dep-sub">× % affaires</div></div>
+      <div class="card kpi-wide"><div class="card-title">Impôt estimé (45 %)</div><div class="card-value warn" id="kpi-tax">—</div><div class="card-sub" id="kpi-net">Revenu net : —</div><div id="kpi-method-compare" style="font-size:.72rem;color:var(--text2);margin-top:4px"></div></div>
       <div class="card"><div class="card-title">kWh rechargés</div><div class="card-value" id="kpi-kwh">—</div></div>
       <div class="card"><div class="card-title">En attente sync</div><div class="card-value" id="kpi-pending">0</div></div>
     </div>
@@ -880,9 +887,16 @@ async function renderDashboard() {
   document.getElementById('kpi-pct').textContent = pct + ' % usage affaires';
   document.getElementById('kpi-nb').textContent = cy.length;
   document.getElementById('kpi-rev').textContent = revenus.toFixed(2) + ' $';
+  const kmAlt = fiscalKmMethod(kmAff);
+  const taxAlt = (revenus - kmAlt) > 0 ? (revenus - kmAlt) * FISCAL.TX_RATE : 0;
+  const bestMethod = depTotal >= kmAlt ? 'réelle' : 'km';
+
   document.getElementById('kpi-dep').textContent = depTotal.toFixed(2) + ' $';
+  document.getElementById('kpi-dep-sub').textContent = '× % affaires (méthode réelle)';
   document.getElementById('kpi-net').textContent = 'Revenu net : ' + revNet.toFixed(2) + ' $';
   document.getElementById('kpi-tax').textContent = tax.toFixed(2) + ' $';
+  document.getElementById('kpi-method-compare').textContent =
+    `Méthode km (réf.) : ${kmAlt.toFixed(0)} $ déd. → impôt ${taxAlt.toFixed(0)} $ · Conseillé : méthode ${bestMethod}`;
   document.getElementById('kpi-kwh').textContent = kwh.toFixed(1) + ' kWh';
   document.getElementById('kpi-pending').textContent = pending;
   updateSyncBadge(pending);
@@ -935,6 +949,17 @@ async function renderRapport() {
     .map(c => `<div class="rapport-row"><span>${c}</span><span>${catTotals[c].toFixed(2)} $</span></div>`)
     .join('');
 
+  // ── Calculs fiscaux étendus ──────────────────────────────────────────────────
+  const kwhTotal   = ry.reduce((s, r) => s + (r.kwh||0), 0);
+  const kwhAff     = kwhTotal * pct / 100;
+  const hqEstime   = kwhAff * FISCAL.HQ_KWH_P1;
+  const kmAlt      = fiscalKmMethod(kmAff);
+  const taxAlt     = (revTotal - kmAlt) > 0 ? (revTotal - kmAlt) * FISCAL.TX_RATE : 0;
+  const methodeGagnante = depTotal >= kmAlt ? 'réelle' : 'km';
+  const ctiBrut    = depTotal;  // approximation : dépenses hors taxes
+  const cti        = ctiBrut * FISCAL.TPS;
+  const rti        = ctiBrut * FISCAL.TVQ;
+
   document.getElementById('rapport-content').innerHTML = `
     <div class="rapport-section">
       <h3>Véhicule</h3>
@@ -950,15 +975,62 @@ async function renderRapport() {
       <div class="rapport-row total"><span>Total revenus</span><span>${revTotal.toFixed(2)} $</span></div>
     </div>
     <div class="rapport-section">
-      <h3>Dépenses déductibles (TP-80 / T2125 Part 4)</h3>
-      <div class="rapport-row"><span>Recharges électriques FLO (× ${pct}%)</span><span>${rechargesDed.toFixed(2)} $</span></div>
+      <h3>Dépenses déductibles — Méthode réelle (TP-80 / T2125 Part 4)</h3>
+      <div class="rapport-row"><span>Recharges VE (× ${pct}%)</span><span>${rechargesDed.toFixed(2)} $</span></div>
       ${depRows}
-      <div class="rapport-row total"><span>Total dépenses</span><span>${depTotal.toFixed(2)} $</span></div>
+      <div class="rapport-row total"><span>Total déductions réelles</span><span>${depTotal.toFixed(2)} $</span></div>
     </div>
     <div class="rapport-section">
-      <h3>Résultat</h3>
+      <h3>Résultat — Méthode réelle</h3>
       <div class="rapport-row"><span>Revenu net d'entreprise</span><span>${revNet.toFixed(2)} $</span></div>
       <div class="rapport-row impot total"><span>Impôt estimé (45 %)</span><span>${tax.toFixed(2)} $</span></div>
+    </div>
+
+    <div class="rapport-section">
+      <h3>Déductions VE — Détail Hydro-Québec</h3>
+      <div class="rapport-row"><span>kWh rechargés (total)</span><span>${kwhTotal.toFixed(1)} kWh</span></div>
+      <div class="rapport-row"><span>kWh affaires (× ${pct}%)</span><span>${kwhAff.toFixed(1)} kWh</span></div>
+      <div class="rapport-row sub"><span>Tarif HQ Tarif D palier 1 (2024)</span><span>7,37 ¢/kWh</span></div>
+      <div class="rapport-row"><span>Coût HQ estimé (affaires)</span><span>${hqEstime.toFixed(2)} $</span></div>
+      <div class="rapport-row total"><span>Coût réel déclaré (affaires)</span><span>${rechargesDed.toFixed(2)} $</span></div>
+      <div class="fiscal-note">
+        📌 Si vous rechargez à domicile (Tarif D), le coût réel déclaré doit correspondre à votre facture HQ × % affaires.
+        Au-delà de 40 kWh/jour le taux monte à 11,28 ¢/kWh. La Kia Soul EV consomme environ 14–16 kWh/100 km.
+      </div>
+    </div>
+
+    <div class="rapport-section">
+      <h3>Méthode Rapide — Comparaison taux km (référence CRA 2024)</h3>
+      <div class="rapport-row sub"><span>Taux : 0,70 $/km (5 000 premiers km) · 0,64 $/km ensuite</span><span></span></div>
+      <div class="rapport-row"><span>Déduction méthode km (${kmAff.toFixed(0)} km)</span><span>${kmAlt.toFixed(2)} $</span></div>
+      <div class="rapport-row"><span>Déduction méthode réelle</span><span>${depTotal.toFixed(2)} $</span></div>
+      <div class="rapport-row win"><span>Méthode conseillée <span class="fiscal-badge badge-ok">${methodeGagnante.toUpperCase()}</span></span><span>${Math.max(depTotal, kmAlt).toFixed(2)} $</span></div>
+      <div class="rapport-row impot"><span>Impôt si méthode km</span><span>${taxAlt.toFixed(2)} $</span></div>
+      <div class="fiscal-note">
+        ⚠️ Ces deux méthodes sont <strong>mutuellement exclusives</strong> — choisissez-en une seule par année fiscale.
+        La méthode km inclut <em>tous</em> les frais véhicule (électricité incluse) ; la méthode réelle exige
+        tous les reçus. Le taux km est une <em>référence</em> — les travailleurs autonomes doivent utiliser
+        les dépenses réelles selon l'ARC (T2125). Consultez un comptable pour confirmer votre choix.
+      </div>
+    </div>
+
+    <div class="rapport-section">
+      <h3>Crédits &amp; récupérations fiscales disponibles</h3>
+      <div class="rapport-row credit"><span>CTI (récupération TPS 5%) <span class="fiscal-badge badge-ok">FÉDÉRAL</span></span><span>~ ${cti.toFixed(2)} $</span></div>
+      <div class="rapport-row credit"><span>RTI (récupération TVQ 9,975%) <span class="fiscal-badge badge-ok">QUÉBEC</span></span><span>~ ${rti.toFixed(2)} $</span></div>
+      <div class="rapport-row total credit"><span>Total récupérable TPS+TVQ</span><span>~ ${(cti + rti).toFixed(2)} $</span></div>
+      <div class="rapport-row sub"><span>DPA Classe 54 — Kia Soul EV</span><span>30% + bonif. 3× (an 1)</span></div>
+      <div class="rapport-row sub"><span>Plafond véhicule de tourisme (2024)</span><span>36 000 $</span></div>
+      <div class="fiscal-note">
+        📋 <strong>TPS/TVQ — obligatoire</strong> : les livreurs Uber sont considérés comme fournissant un
+        service de taxi. L'inscription à la TPS/TVQ est obligatoire dès le premier dollar, peu importe
+        vos revenus annuels (l'exemption petit fournisseur de 30 000 $ ne s'applique pas).<br><br>
+        💡 <strong>Réduire votre impôt</strong> : cotisations REER déductibles · CELI (non déductible
+        mais croissance à l'abri) · frais de bureau à domicile si espace dédié · assurance
+        responsabilité professionnelle.<br><br>
+        🔄 CTI/RTI récupérés sur vos dépenses d'affaires (TPS+TVQ payées). Déclarations trimestrielles
+        recommandées. Estimation basée sur ${depTotal.toFixed(0)} $ de dépenses déclarées.
+      </div>
     </div>`;
 }
 
@@ -975,6 +1047,24 @@ function copyRapport() {
     text += '\n';
   });
   navigator.clipboard.writeText(text).then(() => showToast('Copié ✓')).catch(() => showToast('Erreur copie'));
+}
+
+// ─── Constantes fiscales Québec 2024-2025 ─────────────────────────────────────
+const FISCAL = {
+  HQ_KWH_P1:  0.0737,   // Hydro-Québec Tarif D palier 1 (≤ 40 kWh/jour), $/kWh, 2024
+  HQ_KWH_P2:  0.1128,   // Hydro-Québec Tarif D palier 2, $/kWh, 2024
+  CRA_KM_1:   0.70,     // CRA taux km référence 2024 — 5 000 premiers km (comparaison seulement)
+  CRA_KM_2:   0.64,     // CRA taux km référence 2024 — km supplémentaires
+  TPS:        0.05,
+  TVQ:        0.09975,
+  TX_RATE:    0.45,     // taux estimé combiné: fédéral ~26.5% + provincial ~18.5%
+  // DPA Classe 54 (VÉ): 30% valeur résiduelle, bonification 3× en année 1 (≈ 90% effectif)
+  // DPA Classe 10 (véhicule standard): 30%
+};
+
+function fiscalKmMethod(kmAff) {
+  if (kmAff <= 5000) return kmAff * FISCAL.CRA_KM_1;
+  return 5000 * FISCAL.CRA_KM_1 + (kmAff - 5000) * FISCAL.CRA_KM_2;
 }
 
 // ─── Paramètres (localStorage) ────────────────────────────────────────────────
