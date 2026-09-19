@@ -219,11 +219,24 @@ nav button.active{color:var(--accent)}
       <!-- Ligne 3 : revenus -->
       <div class="card"><div class="card-title">Revenus bruts</div><div class="card-value accent" id="kpi-rev">—</div><div class="card-sub">courses + tips + primes</div></div>
       <div class="card"><div class="card-title">Revenu net (est.)</div><div class="card-value accent" id="kpi-revnet">—</div><div class="card-sub">après 45 % impôt</div></div>
+      <!-- Ligne 3b : encaissements -->
+      <div class="card"><div class="card-title">Encaissé</div><div class="card-value warn" id="kpi-encaisse">—</div><div class="card-sub" id="kpi-encaisse-sub">retraits effectués</div></div>
+      <div class="card"><div class="card-title">Disponible</div><div class="card-value accent" id="kpi-revdispo">—</div><div class="card-sub">revenus − encaissements</div></div>
       <!-- Ligne 4 : déductions côte à côte -->
       <div class="card"><div class="card-title">Déd. réelle (est.)</div><div class="card-value" id="kpi-dep">—</div><div class="card-sub" id="kpi-dep-sub">dépenses + recharges × %</div></div>
       <div class="card"><div class="card-title">Déd. forfait km (est.)</div><div class="card-value" id="kpi-dep-km">—</div><div class="card-sub">0,70 $/km · ref. ARC 2024</div></div>
-      <!-- Ligne 5 : impôt wide -->
-      <div class="card kpi-wide"><div class="card-title">Impôt estimé (45 %)</div><div class="card-value warn" id="kpi-tax">—</div><div class="card-sub" id="kpi-net">Revenu net : —</div><div id="kpi-method-compare" style="font-size:.72rem;color:var(--text2);margin-top:4px"></div></div>
+      <!-- Ligne 5 : impôts côte à côte -->
+      <div class="card">
+        <div class="card-title">Impôt estimé (45 %)</div>
+        <div class="card-value warn" id="kpi-tax-flat">—</div>
+        <div class="card-sub">taux plat · sans déduction</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Impôt avec déductions</div>
+        <div class="card-value warn" id="kpi-tax">—</div>
+        <div class="card-sub" id="kpi-net">Revenu net : —</div>
+        <div id="kpi-method-compare" style="font-size:.72rem;color:var(--text2);margin-top:4px"></div>
+      </div>
       <!-- Ligne 6 : sync -->
       <div class="card kpi-wide" style="text-align:center"><div class="card-title">En attente sync</div><div class="card-value" id="kpi-pending">0</div></div>
     </div>
@@ -246,6 +259,17 @@ nav button.active{color:var(--accent)}
   <section id="s-depenses" class="section">
     <div class="list-header"><h2>Dépenses</h2></div>
     <div id="list-depenses"></div>
+  </section>
+
+  <!-- ENCAISSEMENTS -->
+  <section id="s-encaissements" class="section">
+    <div class="list-header"><h2>Encaissements</h2></div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">Solde disponible (année en cours)</div>
+      <div class="card-value accent" id="encaiss-dispo">—</div>
+      <div class="card-sub" id="encaiss-dispo-sub">revenus − encaissements</div>
+    </div>
+    <div id="list-encaissements"></div>
   </section>
 
   <!-- RAPPORT -->
@@ -284,6 +308,10 @@ nav button.active{color:var(--accent)}
   <button onclick="goTab('depenses')" data-tab="depenses">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
     Dépenses
+  </button>
+  <button onclick="goTab('encaissements')" data-tab="encaissements">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/></svg>
+    Encaiss.
   </button>
   <button onclick="goTab('rapport')" data-tab="rapport">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
@@ -514,6 +542,38 @@ nav button.active{color:var(--accent)}
   </div>
 </div>
 
+<!-- MODAL ENCAISSEMENT -->
+<div class="modal-overlay" id="modal-encaissements">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-encaissements-title">Nouvel encaissement</h3>
+      <button class="modal-close" onclick="closeModal('encaissements')">✕</button>
+    </div>
+    <div id="e-balance-info" style="background:var(--bg3);border-radius:8px;padding:8px 12px;font-size:.82rem;color:var(--accent);margin-bottom:14px"></div>
+    <form id="form-encaissements" onsubmit="saveEncaissement(event)">
+      <input type="hidden" id="e-id">
+      <input type="hidden" id="e-airtableId">
+      <div class="field">
+        <label>Date <button type="button" class="tip-btn" onclick="toggleTip('e-date-tip')">ⓘ</button></label>
+        <div class="tip-text" id="e-date-tip">Date du retrait ou du virement.</div>
+        <input type="date" id="e-date" required>
+      </div>
+      <div class="field">
+        <label>Montant ($) <button type="button" class="tip-btn" onclick="toggleTip('e-mnt-tip')">ⓘ</button></label>
+        <div class="tip-text" id="e-mnt-tip">Montant encaissé. Doit être ≤ au revenu disponible (revenus − encaissements déjà effectués cette année).</div>
+        <input type="number" id="e-montant" placeholder="0.00" step="0.01" min="0.01" required oninput="updateEncaissementBalance()">
+      </div>
+      <div class="field">
+        <label>Note (optionnel)</label>
+        <input type="text" id="e-note" placeholder="ex. Virement compte principal, paiement facture…">
+      </div>
+      <div id="e-warning" style="display:none;background:rgba(255,215,0,.1);border-radius:8px;padding:8px 10px;font-size:.8rem;color:var(--warn);margin-bottom:8px"></div>
+      <button type="submit" class="btn btn-primary">Enregistrer</button>
+      <button type="button" class="btn btn-danger" id="e-delete-btn" style="display:none" onclick="deleteEncaissement()">Supprimer</button>
+    </form>
+  </div>
+</div>
+
 <!-- MODAL PARAMÈTRES -->
 <div class="modal-overlay" id="modal-settings">
   <div class="modal">
@@ -548,21 +608,31 @@ nav button.active{color:var(--accent)}
 <script>
 // ─── DB ───────────────────────────────────────────────────────────────────────
 let db;
-const DB_NAME = 'logbook', DB_VERSION = 1;
+const DB_NAME = 'logbook', DB_VERSION = 3;
 
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = e => {
       const d = e.target.result;
-      ['courses','recharges','depenses'].forEach(name => {
+      ['courses','recharges','depenses','encaissements'].forEach(name => {
         if (!d.objectStoreNames.contains(name)) {
           d.createObjectStore(name, { keyPath: 'id', autoIncrement: true });
         }
       });
     };
-    req.onsuccess = e => { db = e.target.result; resolve(db); };
-    req.onerror = () => reject(req.error);
+    req.onsuccess = e => {
+      db = e.target.result;
+      // Quand une version plus récente veut upgrader, on ferme proprement
+      db.onversionchange = () => { db.close(); db = null; };
+      resolve(db);
+    };
+    req.onerror   = () => reject(req.error);
+    // Upgrade bloquée par un autre onglet / service worker — on signale et on rejette
+    req.onblocked = () => {
+      console.warn('[openDB] upgrade bloquée — ferme les autres onglets');
+      reject(new Error('IndexedDB bloquée — ferme les autres onglets puis rafraîchis la page'));
+    };
   });
 }
 
@@ -572,9 +642,12 @@ function tx(store, mode = 'readonly') {
 
 function dbGetAll(store) {
   return new Promise((res, rej) => {
-    const req = tx(store).getAll();
-    req.onsuccess = () => res(req.result);
-    req.onerror = () => rej(req.error);
+    if (!db) return res([]);
+    try {
+      const req = tx(store).getAll();
+      req.onsuccess = () => res(req.result);
+      req.onerror   = () => rej(req.error);
+    } catch { res([]); } // store introuvable (migration partielle) → tableau vide
   });
 }
 
@@ -618,12 +691,14 @@ function goTab(tab) {
   if (tab === 'courses') renderList('courses');
   if (tab === 'recharges') renderList('recharges');
   if (tab === 'depenses') renderList('depenses');
+  if (tab === 'encaissements') { renderList('encaissements'); renderEncaissementsBalance(); }
   if (tab === 'dashboard') renderDashboard();
   if (tab === 'rapport') renderRapport();
 }
 
 // ─── Form helpers ─────────────────────────────────────────────────────────────
 function openForm(tab) {
+  if (tab === 'encaissements') { openEncaissementForm(); return; }
   if (!['courses','recharges','depenses'].includes(tab)) return;
   editingRecord = null;
   const titles = { courses: 'Nouvelle course', recharges: 'Nouvelle recharge', depenses: 'Nouvelle dépense' };
@@ -641,6 +716,7 @@ function openForm(tab) {
 }
 
 function openEdit(tab, record) {
+  if (tab === 'encaissements') { openEditEncaissement(record); return; }
   editingRecord = record;
   const titles = { courses: 'Modifier la course', recharges: 'Modifier la recharge', depenses: 'Modifier la dépense' };
   document.getElementById('modal-' + tab + '-title').textContent = titles[tab];
@@ -839,7 +915,7 @@ async function renderList(tab) {
           <div class="item-status status-${r._status}">${statusLabel(r._status)}</div>
         </div>
       </div>`).join('');
-  } else {
+  } else if (tab === 'depenses') {
     el.innerHTML = visible.map(r => `
       <div class="item" onclick="openEdit('depenses', ${JSON.stringify(r).replace(/"/g, '&quot;')})">
         <div class="item-left">
@@ -849,6 +925,18 @@ async function renderList(tab) {
         </div>
         <div class="item-right">
           <div class="item-amount">${fmtMoney(r.montant)}</div>
+          <div class="item-status status-${r._status}">${statusLabel(r._status)}</div>
+        </div>
+      </div>`).join('');
+  } else if (tab === 'encaissements') {
+    el.innerHTML = visible.map(r => `
+      <div class="item" onclick="openEdit('encaissements', ${JSON.stringify(r).replace(/"/g, '&quot;')})">
+        <div class="item-left">
+          <div class="item-date">${fmtDate(r.date)}</div>
+          <div class="item-main">${r.note || 'Encaissement'}</div>
+        </div>
+        <div class="item-right">
+          <div class="item-amount" style="color:var(--warn)">− ${fmtMoney(r.montant)}</div>
           <div class="item-status status-${r._status}">${statusLabel(r._status)}</div>
         </div>
       </div>`).join('');
@@ -862,13 +950,14 @@ function statusLabel(s) {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 async function renderDashboard() {
   const year = new Date().getFullYear().toString();
-  const [courses, recharges, depenses] = await Promise.all([
-    dbGetAll('courses'), dbGetAll('recharges'), dbGetAll('depenses')
+  const [courses, recharges, depenses, encaissements] = await Promise.all([
+    dbGetAll('courses'), dbGetAll('recharges'), dbGetAll('depenses'), dbGetAll('encaissements')
   ]);
 
   const cy = courses.filter(r => (r.date || '').startsWith(year) && r._status !== 'pending-delete');
   const ry = recharges.filter(r => (r.date || '').startsWith(year) && r._status !== 'pending-delete');
   const dy = depenses.filter(r => (r.date || '').startsWith(year) && r._status !== 'pending-delete');
+  const ey = encaissements.filter(r => (r.date || '').startsWith(year) && r._status !== 'pending-delete');
 
   const kmAff   = cy.reduce((s, r) => s + (r.kmAffaires || 0), 0);
   const revenus  = cy.reduce((s, r) => s + (r.revenu||0) + (r.pourboire||0) + (r.prime||0), 0);
@@ -895,7 +984,10 @@ async function renderDashboard() {
   const taxAlt   = (revenus - kmAlt) > 0 ? (revenus - kmAlt) * FISCAL.TX_RATE : 0;
   const bestMethod = depTotal >= kmAlt ? 'réelle' : 'km';
 
-  const pending = [...courses, ...recharges, ...depenses]
+  const totalEncaisse = ey.reduce((s, r) => s + (r.montant||0), 0);
+  const revDispo = revenus - totalEncaisse;
+
+  const pending = [...courses, ...recharges, ...depenses, ...encaissements]
     .filter(r => r._status !== 'synced').length;
 
   document.getElementById('kpi-km').textContent        = kmAff.toFixed(1) + ' km';
@@ -906,13 +998,18 @@ async function renderDashboard() {
   document.getElementById('kpi-dep-brut-sub').textContent = `dont ${dedDep.toFixed(2)} $ déd. (× %)`;
   document.getElementById('kpi-rev').textContent       = revenus.toFixed(2) + ' $';
   document.getElementById('kpi-revnet').textContent    = revNetEstimate.toFixed(2) + ' $';
+  document.getElementById('kpi-encaisse').textContent  = totalEncaisse.toFixed(2) + ' $';
+  document.getElementById('kpi-encaisse-sub').textContent = ey.length + ' retrait' + (ey.length > 1 ? 's' : '');
+  document.getElementById('kpi-revdispo').textContent  = revDispo.toFixed(2) + ' $';
+  document.getElementById('kpi-revdispo').style.color  = revDispo < 0 ? 'var(--danger)' : 'var(--accent)';
   document.getElementById('kpi-dep').textContent       = depTotal.toFixed(2) + ' $';
   document.getElementById('kpi-dep-sub').textContent   = `réelles + recharges × ${pct}%`;
   document.getElementById('kpi-dep-km').textContent    = kmAlt.toFixed(2) + ' $';
+  document.getElementById('kpi-tax-flat').textContent  = (revenus * FISCAL.TX_RATE).toFixed(2) + ' $';
   document.getElementById('kpi-net').textContent       = 'Revenu net : ' + revNet.toFixed(2) + ' $';
   document.getElementById('kpi-tax').textContent       = tax.toFixed(2) + ' $';
   document.getElementById('kpi-method-compare').textContent =
-    `Méthode km → impôt ${taxAlt.toFixed(0)} $  ·  Conseillé : ${bestMethod}`;
+    `Méthode ${bestMethod} · km → ${taxAlt.toFixed(0)} $  réelle → ${(revNet > 0 ? revNet * FISCAL.TX_RATE : 0).toFixed(0)} $`;
   document.getElementById('kpi-pending').textContent   = pending;
   updateSyncBadge(pending);
 }
@@ -1097,6 +1194,130 @@ function exportRapport() {
   showToast('Rapport exporté ✓');
 }
 
+// ─── Encaissements ────────────────────────────────────────────────────────────
+function openEncaissementForm() {
+  editingRecord = null;
+  document.getElementById('modal-encaissements-title').textContent = 'Nouvel encaissement';
+  document.getElementById('e-id').value = '';
+  document.getElementById('e-airtableId').value = '';
+  document.getElementById('e-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('e-montant').value = '';
+  document.getElementById('e-note').value = '';
+  document.getElementById('e-delete-btn').style.display = 'none';
+  document.getElementById('e-warning').style.display = 'none';
+  updateEncaissementBalance();
+  document.getElementById('modal-encaissements').classList.add('open');
+}
+
+function openEditEncaissement(record) {
+  editingRecord = record;
+  document.getElementById('modal-encaissements-title').textContent = "Modifier l'encaissement";
+  document.getElementById('e-id').value = record.id || '';
+  document.getElementById('e-airtableId').value = record.airtableId || '';
+  document.getElementById('e-date').value = record.date || '';
+  document.getElementById('e-montant').value = record.montant || '';
+  document.getElementById('e-note').value = record.note || '';
+  document.getElementById('e-delete-btn').style.display = 'block';
+  document.getElementById('e-warning').style.display = 'none';
+  updateEncaissementBalance();
+  document.getElementById('modal-encaissements').classList.add('open');
+}
+
+async function updateEncaissementBalance() {
+  const year = new Date().getFullYear().toString();
+  const existingId = document.getElementById('e-id').value;
+  const [courses, encaiss] = await Promise.all([dbGetAll('courses'), dbGetAll('encaissements')]);
+  const revenus = courses
+    .filter(r => (r.date||'').startsWith(year) && r._status !== 'pending-delete')
+    .reduce((s, r) => s + (r.revenu||0) + (r.pourboire||0) + (r.prime||0), 0);
+  const totalEnc = encaiss
+    .filter(r => (r.date||'').startsWith(year) && r._status !== 'pending-delete' && (!existingId || r.id !== +existingId))
+    .reduce((s, r) => s + (r.montant||0), 0);
+  const dispo = revenus - totalEnc;
+  const info = document.getElementById('e-balance-info');
+  if (info) info.textContent = `Disponible : ${dispo.toFixed(2)} $ (revenus ${revenus.toFixed(2)} $ − déjà encaissé ${totalEnc.toFixed(2)} $)`;
+  const montant = +document.getElementById('e-montant').value || 0;
+  const warn = document.getElementById('e-warning');
+  if (warn && montant > 0) {
+    if (montant > dispo) {
+      warn.textContent = `⚠ Dépasse le revenu disponible de ${(montant - dispo).toFixed(2)} $`;
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+}
+
+async function saveEncaissement(e) {
+  e.preventDefault();
+  const year = new Date().getFullYear().toString();
+  const existingId = document.getElementById('e-id').value;
+  const existingAirtableId = document.getElementById('e-airtableId').value;
+  const montant = +document.getElementById('e-montant').value || 0;
+  const date    = document.getElementById('e-date').value;
+  const note    = document.getElementById('e-note').value.trim();
+
+  // Validation: montant <= revenu disponible
+  const [courses, encaiss] = await Promise.all([dbGetAll('courses'), dbGetAll('encaissements')]);
+  const revenus = courses
+    .filter(r => (r.date||'').startsWith(year) && r._status !== 'pending-delete')
+    .reduce((s, r) => s + (r.revenu||0) + (r.pourboire||0) + (r.prime||0), 0);
+  const totalEnc = encaiss
+    .filter(r => (r.date||'').startsWith(year) && r._status !== 'pending-delete' && (!existingId || r.id !== +existingId))
+    .reduce((s, r) => s + (r.montant||0), 0);
+  const dispo = revenus - totalEnc;
+  if (montant > dispo) {
+    showToastError(`Montant (${montant.toFixed(2)} $) dépasse le disponible (${dispo.toFixed(2)} $)`);
+    return;
+  }
+
+  const record = existingId
+    ? { id: +existingId, date, montant, note, airtableId: existingAirtableId || null, _status: existingAirtableId ? 'pending-update' : 'local' }
+    : { date, montant, note, airtableId: null, _status: 'local' };
+  await dbPut('encaissements', record);
+  closeModal('encaissements');
+  renderList('encaissements');
+  renderEncaissementsBalance();
+  renderDashboard();
+  updateSyncBadge();
+  showToast('Encaissement enregistré ✓');
+}
+
+async function deleteEncaissement() {
+  if (!editingRecord) return;
+  if (!confirm('Supprimer cet encaissement ?')) return;
+  const r = editingRecord;
+  if (r.airtableId) {
+    await dbPut('encaissements', { ...r, _status: 'pending-delete' });
+  } else {
+    await dbDelete('encaissements', r.id);
+  }
+  closeModal('encaissements');
+  renderList('encaissements');
+  renderEncaissementsBalance();
+  renderDashboard();
+  updateSyncBadge();
+  showToast('Encaissement supprimé');
+}
+
+async function renderEncaissementsBalance() {
+  const year = new Date().getFullYear().toString();
+  const [courses, encaiss] = await Promise.all([dbGetAll('courses'), dbGetAll('encaissements')]);
+  const revenus = courses
+    .filter(r => (r.date||'').startsWith(year) && r._status !== 'pending-delete')
+    .reduce((s, r) => s + (r.revenu||0) + (r.pourboire||0) + (r.prime||0), 0);
+  const totalEnc = encaiss
+    .filter(r => (r.date||'').startsWith(year) && r._status !== 'pending-delete')
+    .reduce((s, r) => s + (r.montant||0), 0);
+  const dispo = revenus - totalEnc;
+  const el = document.getElementById('encaiss-dispo');
+  if (!el) return;
+  el.textContent = dispo.toFixed(2) + ' $';
+  el.style.color = dispo < 0 ? 'var(--danger)' : 'var(--accent)';
+  const sub = document.getElementById('encaiss-dispo-sub');
+  if (sub) sub.textContent = `${revenus.toFixed(2)} $ revenus − ${totalEnc.toFixed(2)} $ encaissés`;
+}
+
 // ─── Constantes fiscales Québec 2024-2025 ─────────────────────────────────────
 const FISCAL = {
   HQ_KWH_P1:  0.0737,   // Hydro-Québec Tarif D palier 1 (≤ 40 kWh/jour), $/kWh, 2024
@@ -1167,11 +1388,12 @@ function clearSettings() {
 }
 
 // ─── Airtable direct (mode local) ─────────────────────────────────────────────
-const AT_TABLE_MAP = { courses: 'Courses', recharges: 'Recharges', depenses: 'Depenses' };
+const AT_TABLE_MAP = { courses: 'Courses', recharges: 'Recharges', depenses: 'Depenses', encaissements: 'Encaissements' };
 const AT_FIELD_MAP = {
-  courses:   { date:'Date', kmDebut:'KmDebut', kmFin:'KmFin', kmAffaires:'KmAffaires', revenu:'Revenu', pourboire:'Pourboire', prime:'Prime', dureeMin:'DureeMin' },
-  recharges: { date:'Date', lieu:'Lieu', kwh:'Kwh', cout:'Cout', pctAffaires:'PctAffaires' },
-  depenses:  { date:'Date', categorie:'Categorie', montant:'Montant', pctAffaires:'PctAffaires' },
+  courses:       { date:'Date', kmDebut:'KmDebut', kmFin:'KmFin', kmAffaires:'KmAffaires', revenu:'Revenu', pourboire:'Pourboire', prime:'Prime', dureeMin:'DureeMin' },
+  recharges:     { date:'Date', lieu:'Lieu', kwh:'Kwh', cout:'Cout', pctAffaires:'PctAffaires' },
+  depenses:      { date:'Date', categorie:'Categorie', montant:'Montant', pctAffaires:'PctAffaires' },
+  encaissements: { date:'Date', montant:'Montant', note:'Note' },
 };
 
 function toAirtableFields(table, payload) {
@@ -1184,9 +1406,10 @@ function toAirtableFields(table, payload) {
 }
 
 const AT_FIELD_MAP_REVERSE = {
-  courses:   { Date:'date', KmDebut:'kmDebut', KmFin:'kmFin', KmAffaires:'kmAffaires', Revenu:'revenu', Pourboire:'pourboire', Prime:'prime', DureeMin:'dureeMin' },
-  recharges: { Date:'date', Lieu:'lieu', Kwh:'kwh', Cout:'cout', PctAffaires:'pctAffaires' },
-  depenses:  { Date:'date', Categorie:'categorie', Montant:'montant', PctAffaires:'pctAffaires' },
+  courses:       { Date:'date', KmDebut:'kmDebut', KmFin:'kmFin', KmAffaires:'kmAffaires', Revenu:'revenu', Pourboire:'pourboire', Prime:'prime', DureeMin:'dureeMin' },
+  recharges:     { Date:'date', Lieu:'lieu', Kwh:'kwh', Cout:'cout', PctAffaires:'pctAffaires' },
+  depenses:      { Date:'date', Categorie:'categorie', Montant:'montant', PctAffaires:'pctAffaires' },
+  encaissements: { Date:'date', Montant:'montant', Note:'note' },
 };
 
 function fromAirtableFields(table, atFields) {
@@ -1287,7 +1510,7 @@ async function pullFromAirtable(silent = false) {
     }
 
     let tAdded = 0, tUpdated = 0, tConflicts = 0, tRemoved = 0;
-    for (const table of ['courses', 'recharges', 'depenses']) {
+    for (const table of ['courses', 'recharges', 'depenses', 'encaissements']) {
       const r = await mergeWithLocal(table, allData[table] || []);
       tAdded    += r.added;
       tUpdated  += r.updated;
@@ -1499,8 +1722,8 @@ function renderActiveTripBanner() {
 // ─── Sync ─────────────────────────────────────────────────────────────────────
 async function updateSyncBadge(n) {
   if (n === undefined) {
-    const [c, r, d] = await Promise.all([dbGetAll('courses'), dbGetAll('recharges'), dbGetAll('depenses')]);
-    n = [...c,...r,...d].filter(x => x._status !== 'synced').length;
+    const [c, r, d, e] = await Promise.all([dbGetAll('courses'), dbGetAll('recharges'), dbGetAll('depenses'), dbGetAll('encaissements')]);
+    n = [...c,...r,...d,...e].filter(x => x._status !== 'synced').length;
   }
   const badge = document.getElementById('sync-badge');
   badge.textContent = n;
@@ -1522,7 +1745,7 @@ async function doSync() {
   try {
     // Construire le payload
     const payload = [];
-    for (const tab of ['courses','recharges','depenses']) {
+    for (const tab of ['courses','recharges','depenses','encaissements']) {
       const all = await dbGetAll(tab);
       for (const r of all) {
         const { id, airtableId, _status, ...p } = r;
@@ -1669,10 +1892,10 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 async function exportData() {
-  const [courses, recharges, depenses] = await Promise.all([
-    dbGetAll('courses'), dbGetAll('recharges'), dbGetAll('depenses')
+  const [courses, recharges, depenses, encaissements] = await Promise.all([
+    dbGetAll('courses'), dbGetAll('recharges'), dbGetAll('depenses'), dbGetAll('encaissements')
   ]);
-  const data = { version: 1, exportedAt: new Date().toISOString(), courses, recharges, depenses };
+  const data = { version: 2, exportedAt: new Date().toISOString(), courses, recharges, depenses, encaissements };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1701,25 +1924,27 @@ async function handleImport(e) {
     showToast('Fichier invalide — export logbook JSON attendu');
     return;
   }
+  const encaissementsData = Array.isArray(data.encaissements) ? data.encaissements : [];
 
-  const total = data.courses.length + data.recharges.length + data.depenses.length;
+  const total = data.courses.length + data.recharges.length + data.depenses.length + encaissementsData.length;
   if (!confirm(`Importer ${total} enregistrement${total > 1 ? 's' : ''} ?\nLes données locales existantes seront remplacées.\nClique Synchroniser ensuite pour pousser vers Airtable.`)) return;
 
   // Effacer les données locales
-  for (const tab of ['courses', 'recharges', 'depenses']) {
+  for (const tab of ['courses', 'recharges', 'depenses', 'encaissements']) {
     const all = await dbGetAll(tab);
     for (const r of all) await dbDelete(tab, r.id);
   }
 
-  // Insérer les enregistrements du backup
-  // - On strip l'id local (auto-incrément recalculé par IndexedDB)
-  // - On strip aussi l'airtableId : après import on recrée tout dans Airtable (create)
-  //   pour éviter des PATCH sur des records qui n'existent plus dans la base cible
+  // Insérer les enregistrements du backup (strip id/airtableId)
   for (const tab of ['courses', 'recharges', 'depenses']) {
     for (const r of data[tab]) {
       const { id, _status, airtableId, ...rest } = r;
       await dbPut(tab, { ...rest, _status: 'local' });
     }
+  }
+  for (const r of encaissementsData) {
+    const { id, _status, airtableId, ...rest } = r;
+    await dbPut('encaissements', { ...rest, _status: 'local' });
   }
 
   showToast(`${total} enregistrement${total > 1 ? 's' : ''} importé${total > 1 ? 's' : ''} ✓ — clique Synchroniser pour créer dans Airtable`, 4000);
@@ -1730,7 +1955,13 @@ async function handleImport(e) {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
-  await openDB();
+  try {
+    await openDB();
+  } catch (err) {
+    console.error('[init] openDB failed:', err);
+    showToastError('Base de données inaccessible — ' + err.message.slice(0, 80));
+    return;
+  }
   updateOfflineBar();
   updateSettingsMode();
   renderDashboard();
