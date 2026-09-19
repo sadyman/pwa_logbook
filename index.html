@@ -210,13 +210,22 @@ nav button.active{color:var(--accent)}
     </button>
 
     <div class="kpi-grid" id="kpi-grid">
+      <!-- Ligne 1 : kilométrage -->
       <div class="card"><div class="card-title">Km affaires</div><div class="card-value accent" id="kpi-km">—</div><div class="card-sub" id="kpi-pct">% usage affaires</div></div>
       <div class="card"><div class="card-title">Courses</div><div class="card-value" id="kpi-nb">—</div><div class="card-sub">cette année</div></div>
+      <!-- Ligne 2 : énergie + dépenses totales -->
+      <div class="card"><div class="card-title">kWh rechargés</div><div class="card-value" id="kpi-kwh">—</div><div class="card-sub">recharges VE</div></div>
+      <div class="card"><div class="card-title">Total dépenses</div><div class="card-value" id="kpi-dep-brut">—</div><div class="card-sub" id="kpi-dep-brut-sub">entrées dépenses</div></div>
+      <!-- Ligne 3 : revenus -->
       <div class="card"><div class="card-title">Revenus bruts</div><div class="card-value accent" id="kpi-rev">—</div><div class="card-sub">courses + tips + primes</div></div>
-      <div class="card"><div class="card-title">Déductions (réelle)</div><div class="card-value" id="kpi-dep">—</div><div class="card-sub" id="kpi-dep-sub">× % affaires</div></div>
+      <div class="card"><div class="card-title">Revenu net (est.)</div><div class="card-value accent" id="kpi-revnet">—</div><div class="card-sub">après 45 % impôt</div></div>
+      <!-- Ligne 4 : déductions côte à côte -->
+      <div class="card"><div class="card-title">Déd. réelle (est.)</div><div class="card-value" id="kpi-dep">—</div><div class="card-sub" id="kpi-dep-sub">dépenses + recharges × %</div></div>
+      <div class="card"><div class="card-title">Déd. forfait km (est.)</div><div class="card-value" id="kpi-dep-km">—</div><div class="card-sub">0,70 $/km · ref. ARC 2024</div></div>
+      <!-- Ligne 5 : impôt wide -->
       <div class="card kpi-wide"><div class="card-title">Impôt estimé (45 %)</div><div class="card-value warn" id="kpi-tax">—</div><div class="card-sub" id="kpi-net">Revenu net : —</div><div id="kpi-method-compare" style="font-size:.72rem;color:var(--text2);margin-top:4px"></div></div>
-      <div class="card"><div class="card-title">kWh rechargés</div><div class="card-value" id="kpi-kwh">—</div></div>
-      <div class="card"><div class="card-title">En attente sync</div><div class="card-value" id="kpi-pending">0</div></div>
+      <!-- Ligne 6 : sync -->
+      <div class="card kpi-wide" style="text-align:center"><div class="card-title">En attente sync</div><div class="card-value" id="kpi-pending">0</div></div>
     </div>
     <p style="font-size:.75rem;color:var(--text2);text-align:center">Données de l'année en cours</p>
   </section>
@@ -245,7 +254,7 @@ nav button.active{color:var(--accent)}
     <select class="year-select" id="rapport-year" onchange="renderRapport()"></select>
     <div id="rapport-content"></div>
     <div class="btn-row" style="margin-top:12px">
-      <button class="btn btn-secondary" onclick="copyRapport()">📋 Copier TP-80/T2125</button>
+      <button class="btn btn-secondary" onclick="exportRapport()">📄 Exporter rapport .txt</button>
       <button class="btn btn-secondary" onclick="exportData()">⬇ Export JSON</button>
     </div>
     <div class="btn-row" style="margin-top:8px">
@@ -362,7 +371,7 @@ nav button.active{color:var(--accent)}
       <div class="field">
         <label>Lieu <button type="button" class="tip-btn" onclick="toggleTip('r-lieu-tip')">ⓘ</button></label>
         <div class="tip-text" id="r-lieu-tip">Ex. "Borne FLO maison", "Circuit électrique - Centre Laval". Utile pour distinguer recharges maison vs public.</div>
-        <input type="text" id="r-lieu" list="lieu-options" autocomplete="off" placeholder="ex. Borne FLO maison" required>
+        <input type="text" id="r-lieu" list="lieu-options" autocomplete="lieu" placeholder="ex. Borne FLO maison" required>
         <datalist id="lieu-options"></datalist>
       </div>
       <div class="field-row">
@@ -767,7 +776,7 @@ function autoKmAff() {
 async function populateLieuDatalist() {
   const recharges = await dbGetAll('recharges');
   const lieux = [...new Set(recharges.map(r => r.lieu).filter(Boolean))].sort();
-  document.getElementById('lieu-options').innerHTML = lieux.map(l => `<option value="${l}">`).join('');
+  document.getElementById('lieu-options').innerHTML = lieux.map(l => `<option value="${l}">${l}</option>`).join('');
 }
 
 const DEP_PCT = {
@@ -861,44 +870,50 @@ async function renderDashboard() {
   const ry = recharges.filter(r => (r.date || '').startsWith(year) && r._status !== 'pending-delete');
   const dy = depenses.filter(r => (r.date || '').startsWith(year) && r._status !== 'pending-delete');
 
-  const kmAff = cy.reduce((s, r) => s + (r.kmAffaires || 0), 0);
-  const revenus = cy.reduce((s, r) => s + (r.revenu||0) + (r.pourboire||0) + (r.prime||0), 0);
-  const kwh = ry.reduce((s, r) => s + (r.kwh || 0), 0);
-  const depTotal = dy.reduce((s, r) => s + (r.montant||0)*(r.pctAffaires||0)/100, 0)
-    + ry.reduce((s, r) => s + (r.cout||0)*(r.pctAffaires||0)/100, 0);
+  const kmAff   = cy.reduce((s, r) => s + (r.kmAffaires || 0), 0);
+  const revenus  = cy.reduce((s, r) => s + (r.revenu||0) + (r.pourboire||0) + (r.prime||0), 0);
+  const kwh      = ry.reduce((s, r) => s + (r.kwh || 0), 0);
+  // Déductions réelles = dépenses × % + recharges × %
+  const dedDep   = dy.reduce((s, r) => s + (r.montant||0)*(r.pctAffaires||0)/100, 0);
+  const dedRech  = ry.reduce((s, r) => s + (r.cout||0)*(r.pctAffaires||0)/100, 0);
+  const depTotal = dedDep + dedRech;
+  // Total brut des entrées dépenses (montant nominal, pas multiplié par %)
+  const depBrut  = dy.reduce((s, r) => s + (r.montant||0), 0);
 
-  // km total = last kmFin - first kmDebut (if available)
   const sortedC = [...cy].sort((a,b) => (a.date||'').localeCompare(b.date||''));
   let pct = 0;
   if (sortedC.length >= 1) {
-    const firstKmDebut = sortedC[0].kmDebut || 0;
-    const lastKmFin = sortedC[sortedC.length - 1].kmFin || 0;
-    const kmTotal = lastKmFin - firstKmDebut;
+    const kmTotal = (sortedC[sortedC.length-1].kmFin||0) - (sortedC[0].kmDebut||0);
     pct = kmTotal > 0 ? Math.round(kmAff / kmTotal * 100) : 0;
   }
 
-  const revNet = revenus - depTotal;
-  const tax = revNet > 0 ? revNet * 0.45 : 0;
+  const kmAlt    = fiscalKmMethod(kmAff);
+  const bestDed  = Math.max(depTotal, kmAlt);
+  const revNet   = revenus - bestDed;
+  const tax      = revNet > 0 ? revNet * FISCAL.TX_RATE : 0;
+  const revNetEstimate = revenus * (1 - FISCAL.TX_RATE); // simplifié : revenu brut - 45%
+  const taxAlt   = (revenus - kmAlt) > 0 ? (revenus - kmAlt) * FISCAL.TX_RATE : 0;
+  const bestMethod = depTotal >= kmAlt ? 'réelle' : 'km';
 
   const pending = [...courses, ...recharges, ...depenses]
     .filter(r => r._status !== 'synced').length;
 
-  document.getElementById('kpi-km').textContent = kmAff.toFixed(1) + ' km';
-  document.getElementById('kpi-pct').textContent = pct + ' % usage affaires';
-  document.getElementById('kpi-nb').textContent = cy.length;
-  document.getElementById('kpi-rev').textContent = revenus.toFixed(2) + ' $';
-  const kmAlt = fiscalKmMethod(kmAff);
-  const taxAlt = (revenus - kmAlt) > 0 ? (revenus - kmAlt) * FISCAL.TX_RATE : 0;
-  const bestMethod = depTotal >= kmAlt ? 'réelle' : 'km';
-
-  document.getElementById('kpi-dep').textContent = depTotal.toFixed(2) + ' $';
-  document.getElementById('kpi-dep-sub').textContent = '× % affaires (méthode réelle)';
-  document.getElementById('kpi-net').textContent = 'Revenu net : ' + revNet.toFixed(2) + ' $';
-  document.getElementById('kpi-tax').textContent = tax.toFixed(2) + ' $';
+  document.getElementById('kpi-km').textContent        = kmAff.toFixed(1) + ' km';
+  document.getElementById('kpi-pct').textContent       = pct + ' % usage affaires';
+  document.getElementById('kpi-nb').textContent        = cy.length;
+  document.getElementById('kpi-kwh').textContent       = kwh.toFixed(1) + ' kWh';
+  document.getElementById('kpi-dep-brut').textContent  = depBrut.toFixed(2) + ' $';
+  document.getElementById('kpi-dep-brut-sub').textContent = `dont ${dedDep.toFixed(2)} $ déd. (× %)`;
+  document.getElementById('kpi-rev').textContent       = revenus.toFixed(2) + ' $';
+  document.getElementById('kpi-revnet').textContent    = revNetEstimate.toFixed(2) + ' $';
+  document.getElementById('kpi-dep').textContent       = depTotal.toFixed(2) + ' $';
+  document.getElementById('kpi-dep-sub').textContent   = `réelles + recharges × ${pct}%`;
+  document.getElementById('kpi-dep-km').textContent    = kmAlt.toFixed(2) + ' $';
+  document.getElementById('kpi-net').textContent       = 'Revenu net : ' + revNet.toFixed(2) + ' $';
+  document.getElementById('kpi-tax').textContent       = tax.toFixed(2) + ' $';
   document.getElementById('kpi-method-compare').textContent =
-    `Méthode km (réf.) : ${kmAlt.toFixed(0)} $ déd. → impôt ${taxAlt.toFixed(0)} $ · Conseillé : méthode ${bestMethod}`;
-  document.getElementById('kpi-kwh').textContent = kwh.toFixed(1) + ' kWh';
-  document.getElementById('kpi-pending').textContent = pending;
+    `Méthode km → impôt ${taxAlt.toFixed(0)} $  ·  Conseillé : ${bestMethod}`;
+  document.getElementById('kpi-pending').textContent   = pending;
   updateSyncBadge(pending);
 }
 
@@ -1000,17 +1015,29 @@ async function renderRapport() {
     </div>
 
     <div class="rapport-section">
-      <h3>Méthode Rapide — Comparaison taux km (référence CRA 2024)</h3>
-      <div class="rapport-row sub"><span>Taux : 0,70 $/km (5 000 premiers km) · 0,64 $/km ensuite</span><span></span></div>
-      <div class="rapport-row"><span>Déduction méthode km (${kmAff.toFixed(0)} km)</span><span>${kmAlt.toFixed(2)} $</span></div>
-      <div class="rapport-row"><span>Déduction méthode réelle</span><span>${depTotal.toFixed(2)} $</span></div>
-      <div class="rapport-row win"><span>Méthode conseillée <span class="fiscal-badge badge-ok">${methodeGagnante.toUpperCase()}</span></span><span>${Math.max(depTotal, kmAlt).toFixed(2)} $</span></div>
-      <div class="rapport-row impot"><span>Impôt si méthode km</span><span>${taxAlt.toFixed(2)} $</span></div>
+      <h3>Forfait km vs Dépenses réelles — quelle méthode choisir ?</h3>
+
+      <div class="rapport-row sub"><span>─── MÉTHODE A : FORFAIT KM ───────────────────────────────</span><span></span></div>
+      <div class="rapport-row sub"><span>Principe : un montant fixe par km parcouru remplace tous vos frais de véhicule</span><span></span></div>
+      <div class="rapport-row sub"><span>Taux CRA 2024 : 0,70 $/km (≤ 5 000 km) · 0,64 $/km au-delà</span><span></span></div>
+      <div class="rapport-row sub"><span>✔ Simple — aucun reçu véhicule à conserver · ✘ Inclut TOUT (électricité, assurance…)</span><span></span></div>
+      <div class="rapport-row"><span>→ Déduction forfait km (${kmAff.toFixed(0)} km)</span><span>${kmAlt.toFixed(2)} $</span></div>
+      <div class="rapport-row impot"><span>→ Impôt estimé avec forfait km</span><span>${taxAlt.toFixed(2)} $</span></div>
+
+      <div class="rapport-row sub" style="margin-top:6px"><span>─── MÉTHODE B : DÉPENSES RÉELLES ─────────────────────────</span><span></span></div>
+      <div class="rapport-row sub"><span>Principe : toutes vos dépenses réelles × % usage affaires</span><span></span></div>
+      <div class="rapport-row sub"><span>✔ Plus précise si beaucoup de frais fixes · ✘ Nécessite tous les reçus</span><span></span></div>
+      <div class="rapport-row"><span>→ Déduction dépenses réelles</span><span>${depTotal.toFixed(2)} $</span></div>
+      <div class="rapport-row impot"><span>→ Impôt estimé avec dépenses réelles</span><span>${tax.toFixed(2)} $</span></div>
+
+      <div class="rapport-row win" style="margin-top:8px"><span>⭐ Méthode conseillée cette année <span class="fiscal-badge badge-ok">${methodeGagnante.toUpperCase()}</span></span><span>économie : ${Math.abs(tax - taxAlt).toFixed(2)} $</span></div>
+
       <div class="fiscal-note">
-        ⚠️ Ces deux méthodes sont <strong>mutuellement exclusives</strong> — choisissez-en une seule par année fiscale.
-        La méthode km inclut <em>tous</em> les frais véhicule (électricité incluse) ; la méthode réelle exige
-        tous les reçus. Le taux km est une <em>référence</em> — les travailleurs autonomes doivent utiliser
-        les dépenses réelles selon l'ARC (T2125). Consultez un comptable pour confirmer votre choix.
+        ⚠️ <strong>Mutuellement exclusives</strong> — vous choisissez UNE SEULE méthode par année fiscale, au moment de produire votre déclaration.<br><br>
+        📌 <strong>Nota bene T.A. Canada</strong> : selon l'ARC (formulaire T2125), les travailleurs autonomes
+        doivent normalement déclarer les <em>dépenses réelles</em>. Le taux km ci-dessus est une référence
+        utilisée pour les salariés (T777). Certains comptables l'acceptent pour T.A. en l'absence de reçus
+        complets — confirmez avec un comptable agréé.
       </div>
     </div>
 
@@ -1034,19 +1061,40 @@ async function renderRapport() {
     </div>`;
 }
 
-function copyRapport() {
-  const el = document.getElementById('rapport-content');
+function exportRapport() {
+  const el   = document.getElementById('rapport-content');
   const year = document.getElementById('rapport-year').value;
-  let text = `RAPPORT ANNUEL ${year} — Logbook Livreur\n${'─'.repeat(40)}\n\n`;
+  let text = `RAPPORT ANNUEL ${year} — Logbook Livreur\n${'═'.repeat(50)}\n\n`;
   el.querySelectorAll('.rapport-section').forEach(sec => {
-    text += sec.querySelector('h3').textContent + '\n';
+    const h3 = sec.querySelector('h3');
+    if (h3) {
+      text += `\n── ${h3.textContent.toUpperCase()} ──\n`;
+    }
     sec.querySelectorAll('.rapport-row').forEach(row => {
-      const [l, r] = row.querySelectorAll('span');
-      text += `  ${l.textContent.padEnd(38)} ${r.textContent}\n`;
+      const spans = row.querySelectorAll('span');
+      if (spans.length >= 2) {
+        const label = spans[0].textContent.replace(/\s+/g, ' ').trim();
+        const val   = spans[spans.length - 1].textContent.trim();
+        if (val) text += `  ${label.padEnd(42)} ${val}\n`;
+      }
     });
-    text += '\n';
+    const note = sec.querySelector('.fiscal-note');
+    if (note) {
+      const clean = note.textContent.replace(/\s+/g, ' ').trim();
+      text += `\n  NOTE: ${clean}\n`;
+    }
   });
-  navigator.clipboard.writeText(text).then(() => showToast('Copié ✓')).catch(() => showToast('Erreur copie'));
+  text += `\n${'═'.repeat(50)}\nGénéré le ${new Date().toLocaleDateString('fr-CA')} — Logbook Livreur PWA\n`;
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `rapport-fiscal-${year}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Rapport exporté ✓');
 }
 
 // ─── Constantes fiscales Québec 2024-2025 ─────────────────────────────────────
