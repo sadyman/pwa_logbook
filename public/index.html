@@ -61,6 +61,11 @@ nav button.active{color:var(--accent)}
 .kpi-grid .card{margin-bottom:0}
 .kpi-hero .card-value{font-size:2.1rem}
 .kpi-grid .card-value.sm{font-size:1.3rem}
+.dash-table{width:100%;border-collapse:collapse;font-size:.88rem}
+.dash-table th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);font-weight:600;text-align:right;padding:0 0 6px}
+.dash-table th:first-child,.dash-table td:first-child{text-align:left;color:var(--text2)}
+.dash-table td{text-align:right;padding:5px 0;border-top:1px solid var(--bg3)}
+.dash-note{font-size:.72rem;color:var(--text2);margin-top:8px;line-height:1.4}
 
 /* List */
 .list-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
@@ -215,35 +220,21 @@ nav button.active{color:var(--accent)}
     </button>
 
     <div class="kpi-grid" id="kpi-grid">
-      <!-- ═══ Disponibilités ═══ -->
-      <div class="kpi-section">Disponibilités</div>
-      <div class="card kpi-wide kpi-hero"><div class="card-title">Revenu disponible</div><div class="card-value accent" id="kpi-revdispo">—</div><div class="card-sub">revenus − encaissements (avant encaissement)</div></div>
+      <!-- ═══ Argent ═══ -->
+      <div class="kpi-section">Argent</div>
+      <div class="card kpi-wide kpi-hero"><div class="card-title">Revenu disponible</div><div class="card-value accent" id="kpi-revdispo">—</div><div class="card-sub">revenus − déjà encaissé</div></div>
       <div class="card"><div class="card-title">Total revenu</div><div class="card-value accent sm" id="kpi-rev">—</div><div class="card-sub">courses + tips + primes</div></div>
-      <div class="card"><div class="card-title">Total net</div><div class="card-value accent sm" id="kpi-revnet">—</div><div class="card-sub">revenu − impôt à payer</div></div>
-      <div class="card"><div class="card-title">Total encaissé</div><div class="card-value warn sm" id="kpi-encaisse">—</div><div class="card-sub" id="kpi-encaisse-sub">retraits effectués</div></div>
-      <div class="card"><div class="card-title">Total impôts</div><div class="card-value warn sm" id="kpi-tax-flat">—</div><div class="card-sub">45 % · sans déduction</div></div>
-      <div class="card"><div class="card-title">Crédit impôt km</div><div class="card-value sm" id="kpi-credit-km">—</div><div class="card-sub" id="kpi-credit-km-sub">forfait ARC × 45 %</div></div>
-      <div class="card"><div class="card-title">Crédit impôt $</div><div class="card-value sm" id="kpi-credit-dep">—</div><div class="card-sub" id="kpi-credit-dep-sub">dépenses réelles × 45 %</div></div>
-      <div class="card kpi-wide kpi-hero"><div class="card-title">Impôt à payer après déduction</div><div class="card-value warn" id="kpi-tax">—</div><div class="card-sub" id="kpi-tax-sub">—</div></div>
+      <div class="card"><div class="card-title">Déjà encaissé</div><div class="card-value sm" id="kpi-encaisse">—</div><div class="card-sub" id="kpi-encaisse-sub">retraits</div></div>
+      <div class="card"><div class="card-title">Impôt à payer</div><div class="card-value warn sm" id="kpi-tax">—</div><div class="card-sub" id="kpi-tax-sub">après déduction</div></div>
+      <div class="card"><div class="card-title">Net après impôt</div><div class="card-value accent sm" id="kpi-revnet">—</div><div class="card-sub">revenu − impôt à payer</div></div>
 
-      <!-- ═══ Totaux ═══ -->
-      <div class="kpi-section">Totaux</div>
-      <div class="card"><div class="card-title">Total km</div><div class="card-value sm" id="kpi-km">—</div><div class="card-sub" id="kpi-pct">% usage affaires</div></div>
-      <div class="card"><div class="card-title">Total recharge</div><div class="card-value sm" id="kpi-rech">—</div><div class="card-sub" id="kpi-kwh">— kWh</div></div>
-      <div class="card"><div class="card-title">Total heures</div><div class="card-value sm" id="kpi-heures">—</div><div class="card-sub">temps de course</div></div>
-      <div class="card"><div class="card-title">Total courses</div><div class="card-value sm" id="kpi-nb">—</div><div class="card-sub">cette année</div></div>
-      <div class="card"><div class="card-title">Total encaissements</div><div class="card-value sm" id="kpi-nb-enc">—</div><div class="card-sub">nombre de retraits</div></div>
+      <!-- ═══ Impôts ═══ -->
+      <div class="kpi-section">Calcul de l'impôt (taux estimé 45 %)</div>
+      <div class="card kpi-wide" id="dash-impots"></div>
 
-      <!-- ═══ Moyennes ═══ -->
-      <div class="kpi-section">Moyennes</div>
-      <div class="card"><div class="card-title">Km / course</div><div class="card-value sm" id="kpi-avg-km">—</div><div class="card-sub">km affaires</div></div>
-      <div class="card" style="visibility:hidden"></div>
-      <div class="card"><div class="card-title">Temps / course</div><div class="card-value sm" id="kpi-avg-min-course">—</div><div class="card-sub">durée moyenne</div></div>
-      <div class="card"><div class="card-title">Temps / km</div><div class="card-value sm" id="kpi-avg-min-km">—</div><div class="card-sub">min par km</div></div>
-      <div class="card"><div class="card-title">$ / course</div><div class="card-value accent sm" id="kpi-avg-rev-course">—</div><div class="card-sub">revenu moyen</div></div>
-      <div class="card"><div class="card-title">$ / km</div><div class="card-value accent sm" id="kpi-avg-rev-km">—</div><div class="card-sub">revenu par km</div></div>
-      <div class="card"><div class="card-title">kWh / course</div><div class="card-value sm" id="kpi-avg-kwh-course">—</div><div class="card-sub">toutes recharges</div></div>
-      <div class="card"><div class="card-title">kWh / km</div><div class="card-value sm" id="kpi-avg-kwh-km">—</div><div class="card-sub" id="kpi-avg-kwh-100">— kWh/100 km</div></div>
+      <!-- ═══ Activité ═══ -->
+      <div class="kpi-section">Activité</div>
+      <div class="card kpi-wide" id="dash-activite"></div>
     </div>
     <p style="font-size:.75rem;color:var(--text2);text-align:center">Données de l'année en cours</p>
   </section>
@@ -980,68 +971,73 @@ async function renderDashboard() {
   }
 
   const kmAlt    = fiscalKmMethod(kmAff);
-  const bestDed  = Math.max(depTotal, kmAlt);
-  const revNet   = revenus - bestDed;
-  const tax      = revNet > 0 ? revNet * FISCAL.TX_RATE : 0;
-  const bestMethod = depTotal >= kmAlt ? 'réelle' : 'km';
 
   const totalEncaisse = ey.reduce((s, r) => s + (r.montant||0), 0);
   const revDispo = revenus - totalEncaisse;
 
-  // Crédits = économie d'impôt de chaque méthode ; l'impôt à payer retient la meilleure
-  const creditKm  = kmAlt * FISCAL.TX_RATE;
-  const creditDep = depTotal * FISCAL.TX_RATE;
-  const taxFlat   = revenus * FISCAL.TX_RATE;
-  const totalNet  = revenus - tax;
+  // ── Impôt : impôt 45 % sur le revenu, moins l'économie due à la meilleure déduction ──
+  const R         = FISCAL.TX_RATE;
+  const pctTxt    = Math.round(R * 100) + ' %';
+  const taxFlat   = revenus * R;                                // sans déduction
+  const taxKm     = Math.max(0, revenus - kmAlt) * R;           // méthode forfait km
+  const taxReel   = Math.max(0, revenus - depTotal) * R;        // méthode dépenses réelles
+  const useKm     = kmAlt >= depTotal;
+  const dedRetenue = useKm ? kmAlt : depTotal;
+  const taxToPay  = useKm ? taxKm : taxReel;
+  const economie  = taxFlat - taxToPay;
+  const totalNet  = revenus - taxToPay;
 
-  // Totaux et moyennes
+  // ── Activité ──
   const coutRech  = ry.reduce((s, r) => s + (r.cout || 0), 0);
   const withDur   = cy.filter(r => r.dureeMin > 0);
   const totalMin  = withDur.reduce((s, r) => s + r.dureeMin, 0);
   const kmWithDur = withDur.reduce((s, r) => s + (r.kmAffaires || 0), 0);
   const nb        = cy.length;
-  const div       = (a, b) => b > 0 ? a / b : null;
-  const fmt       = (v, dec, unit) => v === null ? '—' : v.toFixed(dec) + unit;
-  const fmtDur    = m => m === null ? '—' : `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')}`;
-  const set       = (id, txt) => { document.getElementById(id).textContent = txt; };
+
+  const $   = v => v.toFixed(2) + ' $';
+  const div = (a, b) => b > 0 ? a / b : null;
+  const fmt = (v, dec, unit) => v === null ? '—' : v.toFixed(dec) + unit;
+  const dur = m => m === null ? '—' : `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')}`;
+  const set = (id, txt) => { document.getElementById(id).textContent = txt; };
+  const row = (label, value, cls = '') => `<div class="rapport-row ${cls}"><span>${label}</span><span>${value}</span></div>`;
 
   const pending = [...courses, ...recharges, ...depenses, ...encaissements]
     .filter(r => r._status !== 'synced').length;
 
-  // Disponibilités
-  set('kpi-revdispo', revDispo.toFixed(2) + ' $');
+  // Argent
+  set('kpi-revdispo', $(revDispo));
   document.getElementById('kpi-revdispo').style.color = revDispo < 0 ? 'var(--danger)' : 'var(--accent)';
-  set('kpi-rev',            revenus.toFixed(2) + ' $');
-  set('kpi-revnet',         totalNet.toFixed(2) + ' $');
-  set('kpi-encaisse',       totalEncaisse.toFixed(2) + ' $');
-  set('kpi-encaisse-sub',   ey.length + ' retrait' + (ey.length > 1 ? 's' : ''));
-  set('kpi-tax-flat',       taxFlat.toFixed(2) + ' $');
-  set('kpi-credit-km',      creditKm.toFixed(2) + ' $');
-  set('kpi-credit-km-sub',  `${kmAlt.toFixed(0)} $ déd. km${bestMethod === 'km' ? ' · ✓ retenu' : ''}`);
-  set('kpi-credit-dep',     creditDep.toFixed(2) + ' $');
-  set('kpi-credit-dep-sub', `${depTotal.toFixed(0)} $ déd. réelle${bestMethod === 'réelle' ? ' · ✓ retenu' : ''}`);
-  set('kpi-tax',            tax.toFixed(2) + ' $');
-  set('kpi-tax-sub',        `méthode ${bestMethod} · économie ${(taxFlat - tax).toFixed(2)} $ · net imposable ${revNet.toFixed(2)} $`);
+  set('kpi-rev',          $(revenus));
+  set('kpi-encaisse',     $(totalEncaisse));
+  set('kpi-encaisse-sub', ey.length + ' retrait' + (ey.length > 1 ? 's' : ''));
+  set('kpi-tax',          $(taxToPay));
+  set('kpi-tax-sub',      'méthode ' + (useKm ? 'forfait km' : 'dépenses réelles'));
+  set('kpi-revnet',       $(totalNet));
 
-  // Totaux
-  set('kpi-km',     kmAff.toFixed(1) + ' km');
-  set('kpi-pct',    pct + ' % usage affaires');
-  set('kpi-rech',   coutRech.toFixed(2) + ' $');
-  set('kpi-kwh',    kwh.toFixed(1) + ' kWh · ' + ry.length + ' recharge' + (ry.length > 1 ? 's' : ''));
-  set('kpi-heures', fmtDur(totalMin));
-  set('kpi-nb',     nb);
-  set('kpi-nb-enc', ey.length);
+  // Calcul de l'impôt (valeurs numériques uniquement → innerHTML sans risque)
+  document.getElementById('dash-impots').innerHTML =
+      row('Revenu', $(revenus))
+    + row(`Impôt sans déduction (${pctTxt})`, $(taxFlat), 'impot')
+    + row(`Déduction retenue : ${useKm ? 'forfait km' : 'dépenses réelles'}`, '− ' + $(dedRetenue), 'sub')
+    + row(`Économie d'impôt (déduction × ${pctTxt})`, '− ' + $(economie), 'credit')
+    + row('= Impôt à payer', $(taxToPay), 'total')
+    + `<div class="dash-note">Comparaison des 2 méthodes de déduction :<br>`
+    + `${useKm ? '✓' : '·'} Forfait km : ${kmAff.toFixed(0)} km → ${$(kmAlt)} déduits → impôt ${$(taxKm)}<br>`
+    + `${useKm ? '·' : '✓'} Dépenses réelles (× % affaires) : ${$(depTotal)} déduits → impôt ${$(taxReel)}</div>`;
 
-  // Moyennes
-  set('kpi-avg-km',         fmt(div(kmAff, nb), 1, ' km'));
-  set('kpi-avg-min-course', fmtDur(div(totalMin, withDur.length)));
-  set('kpi-avg-min-km',     fmt(div(totalMin, kmWithDur), 1, ' min'));
-  set('kpi-avg-rev-course', fmt(div(revenus, nb), 2, ' $'));
-  set('kpi-avg-rev-km',     fmt(div(revenus, kmAff), 2, ' $'));
-  set('kpi-avg-kwh-course', fmt(div(kwh, nb), 2, ' kWh'));
-  set('kpi-avg-kwh-km',     fmt(div(kwh, kmAff), 3, ' kWh'));
-  const k100 = div(kwh * 100, kmAff);
-  set('kpi-avg-kwh-100',    k100 === null ? '—' : k100.toFixed(1) + ' kWh/100 km');
+  // Activité : totaux + moyennes par course / par km
+  document.getElementById('dash-activite').innerHTML =
+      row('Km affaires', `${kmAff.toFixed(1)} km · ${pct} % usage`)
+    + row('Courses', `${nb} · ${dur(totalMin)}`)
+    + row('Recharges', `${$(coutRech)} · ${kwh.toFixed(1)} kWh`)
+    + row('Encaissements', `${ey.length}`)
+    + `<table class="dash-table" style="margin-top:12px">
+        <tr><th>Moyennes</th><th>par course</th><th>par km</th></tr>
+        <tr><td>Distance</td><td>${fmt(div(kmAff, nb), 1, ' km')}</td><td>—</td></tr>
+        <tr><td>Temps</td><td>${dur(div(totalMin, withDur.length))}</td><td>${fmt(div(totalMin, kmWithDur), 1, ' min')}</td></tr>
+        <tr><td>Revenu</td><td>${fmt(div(revenus, nb), 2, ' $')}</td><td>${fmt(div(revenus, kmAff), 2, ' $')}</td></tr>
+        <tr><td>Énergie</td><td>${fmt(div(kwh, nb), 2, ' kWh')}</td><td>${fmt(div(kwh * 100, kmAff), 1, ' kWh/100')}</td></tr>
+      </table>`;
 
   updateSyncBadge(pending);
 }
