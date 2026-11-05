@@ -1742,7 +1742,7 @@ async function doSync() {
 
     if (failDetails.length) {
       const logLines = [
-        `Mode : ${mode}  |  Envoyés : ${payload.length}  |  OK : ${ok}  |  Échecs : ${failDetails.length}`,
+        `Envoyés : ${payload.length}  |  OK : ${ok}  |  Échecs : ${failDetails.length}`,
         '─────────────────────────────────',
         ...failDetails,
         '─────────────────────────────────',
