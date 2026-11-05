@@ -583,8 +583,13 @@ nav button.active{color:var(--accent)}
     </div>
     <p style="font-size:.8rem;color:var(--text2);margin-bottom:16px;line-height:1.5">
       Ces valeurs sont stockées uniquement sur cet appareil (localStorage).<br>
-      Elles ne sont jamais envoyées nulle part sauf vers Airtable.
+      La clé API est envoyée seulement à /api (Cloudflare) ; le token, seulement à Airtable.
     </p>
+    <div class="field">
+      <label>Clé API (LOGBOOK_API_KEY) <button type="button" class="tip-btn" onclick="toggleTip('s-apikey-tip')">ⓘ</button></label>
+      <div class="tip-text" id="s-apikey-tip">Même valeur que la variable secrète LOGBOOK_API_KEY dans Cloudflare Pages → Settings → Variables and Secrets. Obligatoire en mode déployé (sync via /api).</div>
+      <input type="password" id="s-apikey" placeholder="clé partagée…" autocomplete="off">
+    </div>
     <div class="field">
       <label>Token Airtable (TK_LOGBOOK_UBER) <button type="button" class="tip-btn" onclick="toggleTip('s-token-tip')">ⓘ</button></label>
       <div class="tip-text" id="s-token-tip">Personal Access Token créé dans airtable.com → Account → Developer Hub. Nécessaire uniquement en local ou si pas de Cloudflare Pages.</div>
@@ -705,8 +710,7 @@ function openForm(tab) {
   document.getElementById('modal-' + tab + '-title').textContent = titles[tab];
   clearForm(tab);
   // default today
-  const today = new Date().toISOString().slice(0, 10);
-  const dateField = document.getElementById(tab[0] + '-date') || document.getElementById('c-date');
+  const today = localISODate();
   if (tab === 'courses') document.getElementById('c-date').value = today;
   if (tab === 'recharges') { document.getElementById('r-date').value = today; populateLieuDatalist(); }
   if (tab === 'depenses') document.getElementById('d-date').value = today;
@@ -873,6 +877,12 @@ function toggleTip(id) {
 }
 
 // ─── Lists ────────────────────────────────────────────────────────────────────
+// Date du jour en heure LOCALE (YYYY-MM-DD). toISOString() donne l'heure UTC :
+// au Québec, après ~19-20 h, elle renverrait déjà la date du lendemain.
+function localISODate(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function fmtDate(d) {
   if (!d) return '';
   const [y, m, day] = d.split('-');
@@ -1200,7 +1210,7 @@ function openEncaissementForm() {
   document.getElementById('modal-encaissements-title').textContent = 'Nouvel encaissement';
   document.getElementById('e-id').value = '';
   document.getElementById('e-airtableId').value = '';
-  document.getElementById('e-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('e-date').value = localISODate();
   document.getElementById('e-montant').value = '';
   document.getElementById('e-note').value = '';
   document.getElementById('e-delete-btn').style.display = 'none';
@@ -1339,13 +1349,27 @@ function fiscalKmMethod(kmAff) {
 // ─── Paramètres (localStorage) ────────────────────────────────────────────────
 const LS_TOKEN   = 'lb_at_token';
 const LS_BASE_ID = 'lb_at_base';
+const LS_API_KEY = 'lb_api_key';
 
 function getLocalCreds() {
   return { token: localStorage.getItem(LS_TOKEN), baseId: localStorage.getItem(LS_BASE_ID) };
 }
 
+// Appel vers les Pages Functions (/api/*) avec la clé partagée exigée par _middleware.js
+function apiFetch(path, options = {}) {
+  const headers = { ...(options.headers || {}), 'X-Logbook-Key': localStorage.getItem(LS_API_KEY) || '' };
+  return fetch(path, { ...options, headers });
+}
+
+function apiErrorMessage(status, path, detail) {
+  if (status === 401) return 'Clé API invalide ou absente — renseigne-la dans ⚙ Paramètres';
+  if (status === 404) return `Endpoint ${path} introuvable (404) — vérifie le déploiement Cloudflare Pages`;
+  return `Serveur ${status} : ${String(detail).slice(0, 200)}`;
+}
+
 function openSettings() {
   const { token, baseId } = getLocalCreds();
+  document.getElementById('s-apikey').value = localStorage.getItem(LS_API_KEY) || '';
   document.getElementById('s-token').value = token || '';
   document.getElementById('s-base').value  = baseId || '';
   updateSettingsMode();
@@ -1360,16 +1384,22 @@ function updateSettingsMode() {
     info.textContent = '✓ Mode local actif — sync appelle Airtable directement depuis cet appareil.';
     info.style.color = 'var(--accent)';
     btn.classList.add('configured');
+  } else if (localStorage.getItem(LS_API_KEY)) {
+    info.textContent = '✓ Mode déployé — sync via /api (Cloudflare Pages), clé API configurée.';
+    info.style.color = 'var(--accent)';
+    btn.classList.add('configured');
   } else {
-    info.textContent = '○ Mode déployé — sync via /api/sync (Cloudflare Pages Function).';
-    info.style.color = 'var(--text2)';
+    info.textContent = '⚠ Mode déployé — renseigne la clé API (LOGBOOK_API_KEY) pour pouvoir synchroniser.';
+    info.style.color = 'var(--warn)';
     btn.classList.remove('configured');
   }
 }
 
 function saveSettings() {
+  const apiKey = document.getElementById('s-apikey').value.trim();
   const token  = document.getElementById('s-token').value.trim();
   const baseId = document.getElementById('s-base').value.trim();
+  if (apiKey) localStorage.setItem(LS_API_KEY, apiKey); else localStorage.removeItem(LS_API_KEY);
   if (token)  localStorage.setItem(LS_TOKEN, token);   else localStorage.removeItem(LS_TOKEN);
   if (baseId) localStorage.setItem(LS_BASE_ID, baseId); else localStorage.removeItem(LS_BASE_ID);
   updateSettingsMode();
@@ -1378,9 +1408,11 @@ function saveSettings() {
 }
 
 function clearSettings() {
-  if (!confirm('Effacer le token et le Base ID de cet appareil ?')) return;
+  if (!confirm('Effacer la clé API, le token et le Base ID de cet appareil ?')) return;
+  localStorage.removeItem(LS_API_KEY);
   localStorage.removeItem(LS_TOKEN);
   localStorage.removeItem(LS_BASE_ID);
+  document.getElementById('s-apikey').value = '';
   document.getElementById('s-token').value = '';
   document.getElementById('s-base').value  = '';
   updateSettingsMode();
@@ -1494,17 +1526,14 @@ async function pullFromAirtable(silent = false) {
     if (mode === 'direct') {
       allData = await fetchAllDirect(token, baseId);
     } else {
-      const res = await fetch('/api/pull');
+      const res = await apiFetch('/api/pull');
       const bodyText = await res.text();
-      console.log('[pull] /api/pull HTTP ' + res.status, bodyText);
+      console.log('[pull] /api/pull HTTP ' + res.status);
       if (!res.ok) {
-        if (res.status === 404 && silent) return;
+        if ((res.status === 404 || res.status === 401) && silent) return;
         let detail = bodyText;
         try { const j = JSON.parse(bodyText); detail = j.error || bodyText; } catch {}
-        throw new Error(res.status === 404
-          ? 'Endpoint /api/pull introuvable (404) — configure le token dans ⚙ Paramètres'
-          : `Serveur ${res.status} : ${detail.slice(0, 200)}`
-        );
+        throw new Error(apiErrorMessage(res.status, '/api/pull', detail));
       }
       allData = JSON.parse(bodyText);
     }
@@ -1655,7 +1684,7 @@ async function confirmStopTrip(e) {
   const pourboire = parseFloat(document.getElementById('sp-pourboire').value) || 0;
   const prime     = parseFloat(document.getElementById('sp-prime').value)     || 0;
   const dureeMin  = parseInt(document.getElementById('sp-dureemin').value)    || 0;
-  const date      = trip.startedAt.slice(0, 10); // YYYY-MM-DD
+  const date      = localISODate(new Date(trip.startedAt)); // jour local du départ (startedAt est stocké en UTC)
 
   await dbPut('courses', {
     date, kmDebut: trip.kmDebut, kmFin, kmAffaires: kmAff,
@@ -1775,7 +1804,7 @@ async function doSync() {
     if (mode === 'direct') {
       results = await processDirect(payload, token, baseId);
     } else {
-      const res = await fetch('/api/sync', {
+      const res = await apiFetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1785,10 +1814,7 @@ async function doSync() {
       if (!res.ok) {
         let detail = bodyText;
         try { const j = JSON.parse(bodyText); detail = j.error || bodyText; } catch {}
-        throw new Error(res.status === 404
-          ? 'Endpoint /api/sync introuvable (404) — configure le token dans ⚙ Paramètres'
-          : `Serveur ${res.status} : ${detail}`
-        );
+        throw new Error(apiErrorMessage(res.status, '/api/sync', detail));
       }
       try {
         results = JSON.parse(bodyText);
@@ -1900,7 +1926,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `logbook-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `logbook-${localISODate()}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

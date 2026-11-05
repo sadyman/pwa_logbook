@@ -1,4 +1,4 @@
-const CACHE = 'logbook-v1';
+const CACHE = 'logbook-v2';
 const PRECACHE = ['/', '/index.html', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
@@ -18,7 +18,7 @@ self.addEventListener('activate', e => {
 // Network-first: try network, fall back to cache
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  if (e.request.url.includes('/api/') || e.request.url.includes('/.netlify/')) return;
+  if (e.request.url.includes('/api/')) return;
   e.respondWith(
     fetch(e.request)
       .then(res => {
