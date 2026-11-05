@@ -1,0 +1,19 @@
+{
+  // ⚠ Doit être IDENTIQUE au nom du Worker dans le dashboard Cloudflare (Workers & Pages)
+  "name": "pwa-logbook",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+
+  // Fichiers statiques de la PWA
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Conserve les variables définies dans le dashboard lors des déploiements
+  // (secrets attendus : TK_LOGBOOK_UBER, logbook_uber, LOGBOOK_API_KEY)
+  "keep_vars": true,
+
+  "observability": { "enabled": true }
+}
