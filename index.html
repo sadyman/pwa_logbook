@@ -583,22 +583,12 @@ nav button.active{color:var(--accent)}
     </div>
     <p style="font-size:.8rem;color:var(--text2);margin-bottom:16px;line-height:1.5">
       Ces valeurs sont stockées uniquement sur cet appareil (localStorage).<br>
-      La clé API est envoyée seulement à /api (Cloudflare) ; le token, seulement à Airtable.
+      Le token Airtable et le Base ID restent dans les secrets Cloudflare — jamais sur l'appareil.
     </p>
     <div class="field">
       <label>Clé API (LOGBOOK_API_KEY) <button type="button" class="tip-btn" onclick="toggleTip('s-apikey-tip')">ⓘ</button></label>
-      <div class="tip-text" id="s-apikey-tip">Même valeur que la variable secrète LOGBOOK_API_KEY dans Cloudflare Pages → Settings → Variables and Secrets. Obligatoire en mode déployé (sync via /api).</div>
+      <div class="tip-text" id="s-apikey-tip">Même valeur que la variable secrète LOGBOOK_API_KEY dans Cloudflare Pages → Settings → Variables and Secrets. Obligatoire pour synchroniser.</div>
       <input type="password" id="s-apikey" placeholder="clé partagée…" autocomplete="off">
-    </div>
-    <div class="field">
-      <label>Token Airtable (TK_LOGBOOK_UBER) <button type="button" class="tip-btn" onclick="toggleTip('s-token-tip')">ⓘ</button></label>
-      <div class="tip-text" id="s-token-tip">Personal Access Token créé dans airtable.com → Account → Developer Hub. Nécessaire uniquement en local ou si pas de Cloudflare Pages.</div>
-      <input type="password" id="s-token" placeholder="patXXXXXXXX…" autocomplete="off">
-    </div>
-    <div class="field">
-      <label>Base ID (logbook_uber) <button type="button" class="tip-btn" onclick="toggleTip('s-base-tip')">ⓘ</button></label>
-      <div class="tip-text" id="s-base-tip">Visible dans l'URL Airtable : airtable.com/appXXXXXX/…</div>
-      <input type="text" id="s-base" placeholder="appXXXXXXXXXXXXXX">
     </div>
     <div id="s-mode-info" style="font-size:.75rem;margin-bottom:8px;padding:8px;background:var(--bg3);border-radius:8px;color:var(--text2)"></div>
     <div class="btn-row">
@@ -1347,13 +1337,11 @@ function fiscalKmMethod(kmAff) {
 }
 
 // ─── Paramètres (localStorage) ────────────────────────────────────────────────
-const LS_TOKEN   = 'lb_at_token';
-const LS_BASE_ID = 'lb_at_base';
 const LS_API_KEY = 'lb_api_key';
 
-function getLocalCreds() {
-  return { token: localStorage.getItem(LS_TOKEN), baseId: localStorage.getItem(LS_BASE_ID) };
-}
+// Ancien mode direct supprimé : on purge le token/Base ID Airtable laissés sur l'appareil
+localStorage.removeItem('lb_at_token');
+localStorage.removeItem('lb_at_base');
 
 // Appel vers les Pages Functions (/api/*) avec la clé partagée exigée par _middleware.js
 function apiFetch(path, options = {}) {
@@ -1368,28 +1356,20 @@ function apiErrorMessage(status, path, detail) {
 }
 
 function openSettings() {
-  const { token, baseId } = getLocalCreds();
   document.getElementById('s-apikey').value = localStorage.getItem(LS_API_KEY) || '';
-  document.getElementById('s-token').value = token || '';
-  document.getElementById('s-base').value  = baseId || '';
   updateSettingsMode();
   document.getElementById('modal-settings').classList.add('open');
 }
 
 function updateSettingsMode() {
-  const { token, baseId } = getLocalCreds();
   const info = document.getElementById('s-mode-info');
   const btn  = document.getElementById('settings-btn');
-  if (token && baseId) {
-    info.textContent = '✓ Mode local actif — sync appelle Airtable directement depuis cet appareil.';
-    info.style.color = 'var(--accent)';
-    btn.classList.add('configured');
-  } else if (localStorage.getItem(LS_API_KEY)) {
-    info.textContent = '✓ Mode déployé — sync via /api (Cloudflare Pages), clé API configurée.';
+  if (localStorage.getItem(LS_API_KEY)) {
+    info.textContent = '✓ Sync via /api (Cloudflare Pages) — clé API configurée.';
     info.style.color = 'var(--accent)';
     btn.classList.add('configured');
   } else {
-    info.textContent = '⚠ Mode déployé — renseigne la clé API (LOGBOOK_API_KEY) pour pouvoir synchroniser.';
+    info.textContent = '⚠ Renseigne la clé API (LOGBOOK_API_KEY) pour pouvoir synchroniser.';
     info.style.color = 'var(--warn)';
     btn.classList.remove('configured');
   }
@@ -1397,84 +1377,18 @@ function updateSettingsMode() {
 
 function saveSettings() {
   const apiKey = document.getElementById('s-apikey').value.trim();
-  const token  = document.getElementById('s-token').value.trim();
-  const baseId = document.getElementById('s-base').value.trim();
   if (apiKey) localStorage.setItem(LS_API_KEY, apiKey); else localStorage.removeItem(LS_API_KEY);
-  if (token)  localStorage.setItem(LS_TOKEN, token);   else localStorage.removeItem(LS_TOKEN);
-  if (baseId) localStorage.setItem(LS_BASE_ID, baseId); else localStorage.removeItem(LS_BASE_ID);
   updateSettingsMode();
   closeModal('settings');
   showToast('Paramètres enregistrés ✓');
 }
 
 function clearSettings() {
-  if (!confirm('Effacer la clé API, le token et le Base ID de cet appareil ?')) return;
+  if (!confirm('Effacer la clé API de cet appareil ?')) return;
   localStorage.removeItem(LS_API_KEY);
-  localStorage.removeItem(LS_TOKEN);
-  localStorage.removeItem(LS_BASE_ID);
   document.getElementById('s-apikey').value = '';
-  document.getElementById('s-token').value = '';
-  document.getElementById('s-base').value  = '';
   updateSettingsMode();
   showToast('Paramètres effacés');
-}
-
-// ─── Airtable direct (mode local) ─────────────────────────────────────────────
-const AT_TABLE_MAP = { courses: 'Courses', recharges: 'Recharges', depenses: 'Depenses', encaissements: 'Encaissements' };
-const AT_FIELD_MAP = {
-  courses:       { date:'Date', kmDebut:'KmDebut', kmFin:'KmFin', kmAffaires:'KmAffaires', revenu:'Revenu', pourboire:'Pourboire', prime:'Prime', dureeMin:'DureeMin' },
-  recharges:     { date:'Date', lieu:'Lieu', kwh:'Kwh', cout:'Cout', pctAffaires:'PctAffaires' },
-  depenses:      { date:'Date', categorie:'Categorie', montant:'Montant', pctAffaires:'PctAffaires' },
-  encaissements: { date:'Date', montant:'Montant', note:'Note' },
-};
-
-function toAirtableFields(table, payload) {
-  const map = AT_FIELD_MAP[table] || {};
-  const fields = {};
-  for (const [k, v] of Object.entries(payload)) {
-    if (map[k] !== undefined) fields[map[k]] = v;
-  }
-  return fields;
-}
-
-const AT_FIELD_MAP_REVERSE = {
-  courses:       { Date:'date', KmDebut:'kmDebut', KmFin:'kmFin', KmAffaires:'kmAffaires', Revenu:'revenu', Pourboire:'pourboire', Prime:'prime', DureeMin:'dureeMin' },
-  recharges:     { Date:'date', Lieu:'lieu', Kwh:'kwh', Cout:'cout', PctAffaires:'pctAffaires' },
-  depenses:      { Date:'date', Categorie:'categorie', Montant:'montant', PctAffaires:'pctAffaires' },
-  encaissements: { Date:'date', Montant:'montant', Note:'note' },
-};
-
-function fromAirtableFields(table, atFields) {
-  const map = AT_FIELD_MAP_REVERSE[table] || {};
-  const local = {};
-  for (const [atKey, localKey] of Object.entries(map)) {
-    if (atFields[atKey] !== undefined) local[localKey] = atFields[atKey];
-  }
-  return local;
-}
-
-// Fetch all records from all 3 tables directly (mode local — token en localStorage)
-async function fetchAllDirect(token, baseId) {
-  const result = {};
-  for (const [tableKey, tableName] of Object.entries(AT_TABLE_MAP)) {
-    const records = [];
-    let offset;
-    do {
-      const url = `https://api.airtable.com/v0/${baseId}/${tableName}${offset ? `?offset=${encodeURIComponent(offset)}` : ''}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e.error?.message || `Airtable ${tableName} ${res.status}`);
-      }
-      const data = await res.json();
-      for (const rec of data.records) {
-        records.push({ airtableId: rec.id, ...fromAirtableFields(tableKey, rec.fields) });
-      }
-      offset = data.offset;
-    } while (offset);
-    result[tableKey] = records;
-  }
-  return result;
 }
 
 // Merge one table's Airtable records into local IndexedDB (Airtable = source of truth)
@@ -1519,24 +1433,17 @@ async function pullFromAirtable(silent = false) {
   if (pullBtn) { pullBtn.disabled = true; pullBtn.classList.add('loading'); }
 
   try {
-    const { token, baseId } = getLocalCreds();
-    const mode = (token && baseId) ? 'direct' : 'server';
     let allData;
-
-    if (mode === 'direct') {
-      allData = await fetchAllDirect(token, baseId);
-    } else {
-      const res = await apiFetch('/api/pull');
-      const bodyText = await res.text();
-      console.log('[pull] /api/pull HTTP ' + res.status);
-      if (!res.ok) {
-        if ((res.status === 404 || res.status === 401) && silent) return;
-        let detail = bodyText;
-        try { const j = JSON.parse(bodyText); detail = j.error || bodyText; } catch {}
-        throw new Error(apiErrorMessage(res.status, '/api/pull', detail));
-      }
-      allData = JSON.parse(bodyText);
+    const res = await apiFetch('/api/pull');
+    const bodyText = await res.text();
+    console.log('[pull] /api/pull HTTP ' + res.status);
+    if (!res.ok) {
+      if ((res.status === 404 || res.status === 401) && silent) return;
+      let detail = bodyText;
+      try { const j = JSON.parse(bodyText); detail = j.error || bodyText; } catch {}
+      throw new Error(apiErrorMessage(res.status, '/api/pull', detail));
     }
+    allData = JSON.parse(bodyText);
 
     let tAdded = 0, tUpdated = 0, tConflicts = 0, tRemoved = 0;
     for (const table of ['courses', 'recharges', 'depenses', 'encaissements']) {
@@ -1566,43 +1473,6 @@ async function pullFromAirtable(silent = false) {
   } finally {
     if (pullBtn) { pullBtn.disabled = false; pullBtn.classList.remove('loading'); }
   }
-}
-
-async function atDirect(method, path, body, token, baseId) {
-  const res = await fetch(`https://api.airtable.com/v0/${baseId}${path}`, {
-    method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const e = await res.json().catch(() => ({}));
-    throw new Error(e.error?.message || `Airtable ${res.status}`);
-  }
-  return res.status !== 204 ? res.json() : null;
-}
-
-async function processDirect(payload, token, baseId) {
-  return Promise.all(payload.map(async item => {
-    const { table, action, localId, payload: p, airtableId } = item;
-    const tbl = AT_TABLE_MAP[table];
-    try {
-      if (action === 'create') {
-        const data = await atDirect('POST', `/${tbl}`, { fields: toAirtableFields(table, p) }, token, baseId);
-        return { localId, airtableId: data.id, success: true };
-      } else if (action === 'update') {
-        if (!airtableId) return { localId, success: false, error: 'Missing airtableId' };
-        await atDirect('PATCH', `/${tbl}/${airtableId}`, { fields: toAirtableFields(table, p) }, token, baseId);
-        return { localId, airtableId, success: true };
-      } else if (action === 'delete') {
-        if (!airtableId) return { localId, success: true };
-        await atDirect('DELETE', `/${tbl}/${airtableId}`, null, token, baseId);
-        return { localId, airtableId, success: true };
-      }
-      return { localId, success: false, error: 'Unknown action' };
-    } catch (err) {
-      return { localId, airtableId, success: false, error: err.message };
-    }
-  }));
 }
 
 // ─── Session de course (Start/Stop) ───────────────────────────────────────────
@@ -1794,33 +1664,25 @@ async function doSync() {
 
     if (!payload.length) { showToast('Aucune donnée à synchroniser'); return; }
 
-    // Choix du mode : local (token en localStorage) ou serveur (Cloudflare Pages)
-    const { token, baseId } = getLocalCreds();
-    const mode = (token && baseId) ? 'direct' : 'server';
-    console.log('[sync] mode=' + mode + ' items=' + payload.length, payload);
+    console.log('[sync] items=' + payload.length, payload);
 
     let results;
-
-    if (mode === 'direct') {
-      results = await processDirect(payload, token, baseId);
-    } else {
-      const res = await apiFetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const bodyText = await res.text();
-      console.log('[sync] /api/sync HTTP ' + res.status, bodyText);
-      if (!res.ok) {
-        let detail = bodyText;
-        try { const j = JSON.parse(bodyText); detail = j.error || bodyText; } catch {}
-        throw new Error(apiErrorMessage(res.status, '/api/sync', detail));
-      }
-      try {
-        results = JSON.parse(bodyText);
-      } catch {
-        throw new Error('Réponse non-JSON du serveur : ' + bodyText.slice(0, 200));
-      }
+    const res = await apiFetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const bodyText = await res.text();
+    console.log('[sync] /api/sync HTTP ' + res.status, bodyText);
+    if (!res.ok) {
+      let detail = bodyText;
+      try { const j = JSON.parse(bodyText); detail = j.error || bodyText; } catch {}
+      throw new Error(apiErrorMessage(res.status, '/api/sync', detail));
+    }
+    try {
+      results = JSON.parse(bodyText);
+    } catch {
+      throw new Error('Réponse non-JSON du serveur : ' + bodyText.slice(0, 200));
     }
 
     console.log('[sync] results', results);
