@@ -66,6 +66,12 @@ nav button.active{color:var(--accent)}
 .dash-table th:first-child,.dash-table td:first-child{text-align:left;color:var(--text2)}
 .dash-table td{text-align:right;padding:5px 0;border-top:1px solid var(--bg3)}
 .dash-note{font-size:.72rem;color:var(--text2);margin-top:8px;line-height:1.4}
+.ded-card.retenue{border:1px solid var(--accent)}
+.ded-tag{display:inline-block;font-size:.65rem;font-weight:700;padding:1px 6px;border-radius:6px;margin-top:4px;background:var(--bg3);color:var(--text2)}
+.ded-card.retenue .ded-tag{background:var(--accent);color:#000}
+.tax-bar{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--bg3);margin:10px 0 8px}
+.tax-bar .eco{background:#48bb78}.tax-bar .pay{background:var(--warn)}
+.tax-legend{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
 
 /* List */
 .list-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
@@ -223,13 +229,16 @@ nav button.active{color:var(--accent)}
       <!-- ═══ Argent ═══ -->
       <div class="kpi-section">Argent</div>
       <div class="card kpi-wide kpi-hero"><div class="card-title">Revenu disponible</div><div class="card-value accent" id="kpi-revdispo">—</div><div class="card-sub">revenus − déjà encaissé</div></div>
-      <div class="card"><div class="card-title">Total revenu</div><div class="card-value accent sm" id="kpi-rev">—</div><div class="card-sub">courses + tips + primes</div></div>
+      <div class="card"><div class="card-title">Total revenu (brut)</div><div class="card-value accent sm" id="kpi-rev">—</div><div class="card-sub">courses + tips + primes</div></div>
       <div class="card"><div class="card-title">Déjà encaissé</div><div class="card-value sm" id="kpi-encaisse">—</div><div class="card-sub" id="kpi-encaisse-sub">retraits</div></div>
-      <div class="card"><div class="card-title">Impôt à payer</div><div class="card-value warn sm" id="kpi-tax">—</div><div class="card-sub" id="kpi-tax-sub">après déduction</div></div>
-      <div class="card"><div class="card-title">Net après impôt</div><div class="card-value accent sm" id="kpi-revnet">—</div><div class="card-sub">revenu − impôt à payer</div></div>
 
-      <!-- ═══ Impôts ═══ -->
-      <div class="kpi-section">Calcul de l'impôt (taux estimé 45 %)</div>
+      <!-- ═══ Impôts & déductions ═══ -->
+      <div class="kpi-section">Impôts &amp; déductions</div>
+      <div class="card kpi-wide kpi-hero"><div class="card-title">Impôts estimés</div><div class="card-value warn" id="kpi-tax-flat">—</div><div class="card-sub">45 % du brut · estimation maximale, avant déduction</div></div>
+      <div class="card ded-card" id="ded-reel-card"><div class="card-title">Déduction réelle</div><div class="card-value sm" id="kpi-ded-reel">—</div><div class="card-sub" id="kpi-ded-reel-sub">—</div><div class="card-sub" id="kpi-ded-reel-eco">—</div><span class="ded-tag" id="kpi-ded-reel-tag">—</span></div>
+      <div class="card ded-card" id="ded-km-card"><div class="card-title">Déduction km</div><div class="card-value sm" id="kpi-ded-km">—</div><div class="card-sub" id="kpi-ded-km-sub">—</div><div class="card-sub" id="kpi-ded-km-eco">—</div><span class="ded-tag" id="kpi-ded-km-tag">—</span></div>
+      <div class="card"><div class="card-title">Impôt après déduction</div><div class="card-value warn sm" id="kpi-tax">—</div><div class="card-sub" id="kpi-tax-sub">—</div></div>
+      <div class="card"><div class="card-title">Net après impôt</div><div class="card-value accent sm" id="kpi-revnet">—</div><div class="card-sub">brut − impôt après déduction</div></div>
       <div class="card kpi-wide" id="dash-impots"></div>
 
       <!-- ═══ Activité ═══ -->
@@ -1010,20 +1019,33 @@ async function renderDashboard() {
   set('kpi-rev',          $(revenus));
   set('kpi-encaisse',     $(totalEncaisse));
   set('kpi-encaisse-sub', ey.length + ' retrait' + (ey.length > 1 ? 's' : ''));
-  set('kpi-tax',          $(taxToPay));
-  set('kpi-tax-sub',      'méthode ' + (useKm ? 'forfait km' : 'dépenses réelles'));
-  set('kpi-revnet',       $(totalNet));
 
-  // Calcul de l'impôt (valeurs numériques uniquement → innerHTML sans risque)
+  // Impôts & déductions
+  set('kpi-tax-flat', $(taxFlat));
+  const ecoReel = taxFlat - taxReel, ecoKm = taxFlat - taxKm;
+  set('kpi-ded-reel',     $(depTotal));
+  set('kpi-ded-reel-sub', `dépenses ${$(dedDep)} + recharges ${$(dedRech)}`);
+  set('kpi-ded-reel-eco', `économie ${$(ecoReel)}`);
+  set('kpi-ded-km',       $(kmAlt));
+  set('kpi-ded-km-sub',   kmAff <= 5000 ? `${kmAff.toFixed(0)} km × ${FISCAL.CRA_KM_1.toFixed(2)} $` : `5000 km × ${FISCAL.CRA_KM_1.toFixed(2)} $ + ${(kmAff - 5000).toFixed(0)} km × ${FISCAL.CRA_KM_2.toFixed(2)} $`);
+  set('kpi-ded-km-eco',   `économie ${$(ecoKm)}`);
+  set('kpi-ded-reel-tag', useKm ? 'non retenue' : '✓ retenue');
+  set('kpi-ded-km-tag',   useKm ? '✓ retenue' : 'non retenue');
+  document.getElementById('ded-reel-card').classList.toggle('retenue', !useKm);
+  document.getElementById('ded-km-card').classList.toggle('retenue', useKm);
+  set('kpi-tax',     $(taxToPay));
+  set('kpi-tax-sub', `estimés − économie (${useKm ? 'km' : 'réelle'})`);
+  set('kpi-revnet',  $(totalNet));
+
+  // Barre : impôts estimés = économie + à payer (valeurs numériques uniquement)
+  const pEco = taxFlat > 0 ? economie / taxFlat * 100 : 0;
   document.getElementById('dash-impots').innerHTML =
-      row('Revenu', $(revenus))
-    + row(`Impôt sans déduction (${pctTxt})`, $(taxFlat), 'impot')
-    + row(`Déduction retenue : ${useKm ? 'forfait km' : 'dépenses réelles'}`, '− ' + $(dedRetenue), 'sub')
-    + row(`Économie d'impôt (déduction × ${pctTxt})`, '− ' + $(economie), 'credit')
-    + row('= Impôt à payer', $(taxToPay), 'total')
-    + `<div class="dash-note">Comparaison des 2 méthodes de déduction :<br>`
-    + `${useKm ? '✓' : '·'} Forfait km : ${kmAff.toFixed(0)} km → ${$(kmAlt)} déduits → impôt ${$(taxKm)}<br>`
-    + `${useKm ? '·' : '✓'} Dépenses réelles (× % affaires) : ${$(depTotal)} déduits → impôt ${$(taxReel)}</div>`;
+      `<div class="card-title">Tes impôts estimés, une fois la déduction appliquée</div>`
+    + `<div class="tax-bar"><div class="eco" style="width:${pEco.toFixed(1)}%"></div><div class="pay" style="width:${(100 - pEco).toFixed(1)}%"></div></div>`
+    + row('Impôts estimés (45 % du brut)', $(taxFlat), 'impot')
+    + row(`<span><span class="tax-legend" style="background:#48bb78"></span>Économie grâce à la déduction ${useKm ? 'km' : 'réelle'}</span>`, '− ' + $(economie), 'credit')
+    + row(`<span><span class="tax-legend" style="background:var(--warn)"></span>= Impôt après déduction</span>`, $(taxToPay), 'total')
+    + `<div class="dash-note">Les 2 déductions sont deux façons de compter les frais de la voiture : on n'en garde qu'une, celle qui fait économiser le plus.</div>`;
 
   // Activité : totaux + moyennes par course / par km
   document.getElementById('dash-activite').innerHTML =
